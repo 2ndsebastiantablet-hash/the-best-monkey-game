@@ -1,8 +1,10 @@
 using GorillaLocomotion;
+using System.Collections;
 using UnityEngine;
 
 namespace TheBestMonkeyGame
 {
+    [DefaultExecutionOrder(200)]
     public sealed class PlayerRespawn : MonoBehaviour
     {
         [SerializeField] private Transform spawnPoint;
@@ -27,6 +29,11 @@ namespace TheBestMonkeyGame
             fallbackRotation = transform.rotation;
         }
 
+        private void Start()
+        {
+            StartCoroutine(ReinitializeAfterTrackedPose());
+        }
+
         private void FixedUpdate()
         {
             if (transform.position.y < fallThreshold)
@@ -43,7 +50,27 @@ namespace TheBestMonkeyGame
             body.angularVelocity = Vector3.zero;
             transform.SetPositionAndRotation(position, rotation);
             Physics.SyncTransforms();
+            StopAllCoroutines();
+            StartCoroutine(ReinitializeAfterTrackedPose());
+        }
+
+        private IEnumerator ReinitializeAfterTrackedPose()
+        {
+            bool wasDisabled = locomotion.disableMovement;
+            locomotion.disableMovement = true;
+            body.linearVelocity = Vector3.zero;
+            body.angularVelocity = Vector3.zero;
+
+            // Allow OpenXR pose components to update at the new root position before
+            // GorillaLocomotion snapshots its head/hand history.
+            yield return null;
+            yield return new WaitForEndOfFrame();
+
+            Physics.SyncTransforms();
+            body.linearVelocity = Vector3.zero;
+            body.angularVelocity = Vector3.zero;
             locomotion.InitializeValues();
+            locomotion.disableMovement = wasDisabled;
         }
     }
 

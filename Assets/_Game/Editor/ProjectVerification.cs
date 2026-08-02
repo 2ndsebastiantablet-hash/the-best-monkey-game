@@ -2,6 +2,7 @@
 using System;
 using System.Linq;
 using GorillaLocomotion;
+using TheBestMonkeyGame;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEditor.XR.Management;
@@ -20,8 +21,6 @@ namespace TheBestMonkeyGame.Editor
         private const string ErrorCountKey = "TBMG.Verification.ErrorCount";
         private const string ErrorTextKey = "TBMG.Verification.ErrorText";
         private const string FrameCountKey = "TBMG.Verification.FrameCount";
-        private const string ScenePath = "Assets/_Game/Scenes/LocomotionTest.unity";
-        private const string PrefabPath = "Assets/_Game/Prefabs/VRPlayer.prefab";
 
         static ProjectVerification()
         {
@@ -31,7 +30,7 @@ namespace TheBestMonkeyGame.Editor
             }
         }
 
-        [MenuItem("Tools/The Best Monkey Game/Verify Play Mode")]
+        [MenuItem("Tools/The Best Monkey Game/Verify Revision Play Mode")]
         public static void Run()
         {
             SessionState.SetBool(ActiveKey, true);
@@ -44,7 +43,7 @@ namespace TheBestMonkeyGame.Editor
             try
             {
                 ValidateProjectStructure();
-                EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+                EditorSceneManager.OpenScene(RevisionBootstrap.MainScenePath, OpenSceneMode.Single);
                 EditorApplication.EnterPlaymode();
             }
             catch (Exception exception)
@@ -82,8 +81,7 @@ namespace TheBestMonkeyGame.Editor
         private static void RecordError(string message)
         {
             SessionState.SetInt(ErrorCountKey, SessionState.GetInt(ErrorCountKey, 0) + 1);
-            string prior = SessionState.GetString(ErrorTextKey, string.Empty);
-            SessionState.SetString(ErrorTextKey, prior + "\n" + message);
+            SessionState.SetString(ErrorTextKey, SessionState.GetString(ErrorTextKey, string.Empty) + "\n" + message);
         }
 
         private static void OnPlayModeStateChanged(PlayModeStateChange state)
@@ -92,7 +90,6 @@ namespace TheBestMonkeyGame.Editor
             {
                 return;
             }
-
             if (state == PlayModeStateChange.EnteredPlayMode)
             {
                 SessionState.SetString(PhaseKey, "playing");
@@ -114,10 +111,9 @@ namespace TheBestMonkeyGame.Editor
             {
                 return;
             }
-
-            int frameCount = SessionState.GetInt(FrameCountKey, 0) + 1;
-            SessionState.SetInt(FrameCountKey, frameCount);
-            if (frameCount >= 180)
+            int frames = SessionState.GetInt(FrameCountKey, 0) + 1;
+            SessionState.SetInt(FrameCountKey, frames);
+            if (frames >= 180)
             {
                 EditorApplication.ExitPlaymode();
             }
@@ -125,18 +121,37 @@ namespace TheBestMonkeyGame.Editor
 
         private static void ValidateProjectStructure()
         {
-            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
-            if (prefab == null || prefab.GetComponent<Player>() == null || prefab.GetComponent<Rigidbody>() == null)
+            ValidatePlayerPrefab();
+
+            Scene scene = EditorSceneManager.OpenScene(RevisionBootstrap.MainScenePath, OpenSceneMode.Single);
+            Player[] players = UnityEngine.Object.FindObjectsByType<Player>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            Surface[] surfaces = UnityEngine.Object.FindObjectsByType<Surface>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            MeshCollider[] mapColliders = surfaces.Select(item => item.GetComponent<MeshCollider>()).Where(item => item != null).ToArray();
+            GameObject spawn = GameObject.Find("PlayerSpawn");
+
+            if (!scene.IsValid() || players.Length != 1 || Camera.main == null || spawn == null)
             {
-                throw new InvalidOperationException("VRPlayer prefab is missing required Player or Rigidbody components.");
+                throw new InvalidOperationException($"Main scene objects invalid: players={players.Length}, camera={Camera.main != null}, spawn={spawn != null}.");
+            }
+            if (surfaces.Length != 4 || mapColliders.Length != 4 || mapColliders.Any(collider => collider.convex || collider.isTrigger))
+            {
+                throw new InvalidOperationException($"Map collision invalid: surfaces={surfaces.Length}, meshColliders={mapColliders.Length}.");
+            }
+            if (surfaces.Any(surface => surface.gameObject.layer != 8 || surface.gameObject.tag != "LocomotionSurface"))
+            {
+                throw new InvalidOperationException("Every collidable map mesh must use Locomotion layer and LocomotionSurface tag.");
             }
 
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
-            Surface[] surfaces = UnityEngine.Object.FindObjectsByType<Surface>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-            Player[] players = UnityEngine.Object.FindObjectsByType<Player>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-            if (!scene.IsValid() || surfaces.Length < 20 || players.Length != 1 || Camera.main == null)
+            PlayerRespawn respawn = players[0].GetComponent<PlayerRespawn>();
+            if (respawn == null || respawn.SpawnPoint != spawn.transform || Mathf.Abs(players[0].transform.position.y - spawn.transform.position.y) > 0.001f)
             {
-                throw new InvalidOperationException($"Scene validation failed: surfaces={surfaces.Length}, players={players.Length}, mainCamera={Camera.main != null}.");
+                throw new InvalidOperationException("Player spawn assignment is inconsistent.");
+            }
+
+            EditorBuildSettingsScene[] buildScenes = EditorBuildSettings.scenes;
+            if (buildScenes.Length < 2 || buildScenes[0].path != RevisionBootstrap.MainScenePath || !buildScenes[0].enabled)
+            {
+                throw new InvalidOperationException("MainMap must be the first enabled build scene.");
             }
 
             XRGeneralSettings xrSettings = XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.Android);
@@ -149,10 +164,54 @@ namespace TheBestMonkeyGame.Editor
             string[] enabledFeatures = openXr.GetFeatures().Where(feature => feature.enabled).Select(feature => feature.GetType().Name).ToArray();
             if (!enabledFeatures.Contains("MetaQuestFeature") || !enabledFeatures.Any(name => name.Contains("ControllerProfile")))
             {
-                throw new InvalidOperationException("Meta Quest support or a controller interaction profile is not enabled.");
+                throw new InvalidOperationException("Meta Quest support or controller interaction profile is not enabled.");
             }
 
-            Debug.Log($"STRUCTURE_VALIDATION_SUCCESS surfaces={surfaces.Length} enabledOpenXRFeatures={string.Join(",", enabledFeatures)}");
+            Debug.Log($"REVISION_STRUCTURE_VALIDATION_SUCCESS surfaces={surfaces.Length} meshColliders={mapColliders.Length} spawn={spawn.transform.position:F3}");
+        }
+
+        private static void ValidatePlayerPrefab()
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(RevisionBootstrap.PlayerPrefabPath);
+            if (prefab == null || prefab.GetComponent<Player>() == null || prefab.GetComponent<Rigidbody>() == null)
+            {
+                throw new InvalidOperationException("VRPlayer prefab is missing Player or Rigidbody.");
+            }
+
+            Transform tracking = prefab.transform.Find("TrackingSpace");
+            Transform head = prefab.transform.Find("TrackingSpace/Head");
+            Transform left = prefab.transform.Find("HandCollisionFollowers/LeftHand");
+            Transform right = prefab.transform.Find("HandCollisionFollowers/RightHand");
+            XRFloorTrackingOrigin origin = prefab.GetComponent<XRFloorTrackingOrigin>();
+            if (tracking == null || head == null || origin == null || Mathf.Abs(tracking.localPosition.y) > 0.001f || head.localPosition.y > 0.3f || Mathf.Abs(origin.PlayerFloorOffset) > 0.001f)
+            {
+                throw new InvalidOperationException("Floor-origin player hierarchy is not calibrated to zero.");
+            }
+
+            ValidatePhysicsAndVisualHand(left, "LeftVisualHand_SourceMesh");
+            ValidatePhysicsAndVisualHand(right, "RightVisualHand_SourceMesh");
+
+            Transform body = prefab.transform.Find("Visuals/GorillaBody/CompleteTemporaryModel");
+            if (body == null || body.GetComponent<MeshRenderer>() == null || body.GetComponent<Collider>() != null)
+            {
+                throw new InvalidOperationException("Complete collider-free temporary body visual is missing.");
+            }
+        }
+
+        private static void ValidatePhysicsAndVisualHand(Transform hand, string visualName)
+        {
+            if (hand == null)
+            {
+                throw new InvalidOperationException("Authoritative hand transform is missing.");
+            }
+            SphereCollider sphere = hand.GetComponent<SphereCollider>();
+            Renderer physicsRenderer = hand.GetComponent<Renderer>();
+            Transform visual = hand.Find(visualName);
+            if (sphere == null || !sphere.enabled || physicsRenderer == null || physicsRenderer.enabled ||
+                visual == null || visual.GetComponent<MeshRenderer>() == null || visual.GetComponentInChildren<Collider>() != null)
+            {
+                throw new InvalidOperationException($"Physics/visual hand contract invalid for {hand.name}.");
+            }
         }
 
         private static void Finish()
@@ -165,13 +224,19 @@ namespace TheBestMonkeyGame.Editor
 
             if (errors == 0)
             {
-                Debug.Log("PLAYMODE_VERIFICATION_SUCCESS frames=180 errors=0");
-                EditorApplication.Exit(0);
+                Debug.Log("REVISION_PLAYMODE_VERIFICATION_SUCCESS frames=180 errors=0");
+                if (Application.isBatchMode)
+                {
+                    EditorApplication.Exit(0);
+                }
             }
             else
             {
-                Debug.LogError($"PLAYMODE_VERIFICATION_FAILED errors={errors}{details}");
-                EditorApplication.Exit(1);
+                Debug.LogError($"REVISION_PLAYMODE_VERIFICATION_FAILED errors={errors}{details}");
+                if (Application.isBatchMode)
+                {
+                    EditorApplication.Exit(1);
+                }
             }
         }
     }

@@ -18,6 +18,12 @@ namespace TheBestMonkeyGame
             bodyCollider = capsule;
         }
 
+        public float FloorClearance
+        {
+            get => floorClearance;
+            set => floorClearance = Mathf.Max(0f, value);
+        }
+
         private void LateUpdate()
         {
             if (head == null || bodyCollider == null)

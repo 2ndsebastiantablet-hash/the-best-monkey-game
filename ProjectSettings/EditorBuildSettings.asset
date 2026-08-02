@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/_Game/Scenes/MainMap.unity
+    guid: 02a49a9c53205a744b1dd6ee3c84bdec
+  - enabled: 1
     path: Assets/_Game/Scenes/LocomotionTest.unity
     guid: 5935603426f656c47a7efde54b6de745
   m_configObjects:

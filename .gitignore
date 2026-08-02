@@ -40,3 +40,6 @@ sysinfo.txt
 
 # Local batch-mode verification logs
 unity-*.log
+
+# Raw drop folder; canonical imported copies live under Assets/ThirdParty
+IncomingAssets/
