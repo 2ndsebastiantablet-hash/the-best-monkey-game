@@ -16,6 +16,7 @@ namespace TheBestMonkeyGame.Multiplayer
 
         private float nextRequestTime;
         private bool requestInProgress;
+        private bool leaveInProgress;
 
         public ISession ActiveSession { get; private set; }
         public string CurrentRoomCode { get; private set; } = string.Empty;
@@ -107,23 +108,39 @@ namespace TheBestMonkeyGame.Multiplayer
 
         public async Task LeaveAsync(bool returnToMenu = true)
         {
+            if (leaveInProgress) return;
+            leaveInProgress = true;
             presenter.SetStatus("Leaving room...");
             ISession session = ActiveSession;
+            bool wasHost = session != null ? session.IsHost : connection != null && connection.Manager != null && connection.Manager.IsHost;
             Unsubscribe(session);
             ActiveSession = null;
             CurrentRoomCode = string.Empty;
             try
             {
-                if (session != null && session.IsMember) await session.LeaveAsync();
+                if (wasHost)
+                {
+                    connection.DisconnectRemoteClients("The host ended the room.");
+                    await Task.Yield();
+                }
+                if (session != null && session.IsMember)
+                {
+                    if (session.IsHost) await session.AsHost().DeleteAsync();
+                    else await session.LeaveAsync();
+                }
             }
             catch (Exception exception)
             {
                 Debug.LogWarning($"Room cleanup warning: {exception.Message}");
             }
-            connection.Shutdown();
-            SessionChanged?.Invoke();
-            presenter.SetStatus("Ready");
-            if (returnToMenu) scenes.ReturnToMenu();
+            finally
+            {
+                await connection.ShutdownAndWaitAsync();
+                SessionChanged?.Invoke();
+                presenter.SetStatus("Ready");
+                leaveInProgress = false;
+                if (returnToMenu) scenes.ReturnToMenu();
+            }
         }
 
         public async Task StartLocalHostAsync()
@@ -181,7 +198,7 @@ namespace TheBestMonkeyGame.Multiplayer
             if (session == null) return;
             session.Changed += OnSessionChanged;
             session.RemovedFromSession += OnRemoved;
-            session.Deleted += OnRemoved;
+            session.Deleted += OnDeleted;
         }
 
         private void Unsubscribe(ISession session)
@@ -189,13 +206,21 @@ namespace TheBestMonkeyGame.Multiplayer
             if (session == null) return;
             session.Changed -= OnSessionChanged;
             session.RemovedFromSession -= OnRemoved;
-            session.Deleted -= OnRemoved;
+            session.Deleted -= OnDeleted;
         }
 
         private void OnSessionChanged() => SessionChanged?.Invoke();
         private async void OnRemoved()
         {
+            if (leaveInProgress) return;
             presenter.ShowError("The room was closed or you were disconnected.");
+            await LeaveAsync();
+        }
+
+        private async void OnDeleted()
+        {
+            if (leaveInProgress) return;
+            presenter.ShowError("The host ended the room.");
             await LeaveAsync();
         }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Unity.Netcode;
@@ -70,6 +71,30 @@ namespace TheBestMonkeyGame.Multiplayer
         public void Shutdown()
         {
             if (networkManager != null && networkManager.IsListening) networkManager.Shutdown();
+        }
+
+        public void DisconnectRemoteClients(string reason)
+        {
+            if (networkManager == null || !networkManager.IsServer) return;
+            ulong[] remoteClients = networkManager.ConnectedClientsIds
+                .Where(clientId => clientId != NetworkManager.ServerClientId)
+                .ToArray();
+            foreach (ulong clientId in remoteClients) networkManager.DisconnectClient(clientId, reason);
+        }
+
+        public async Task ShutdownAndWaitAsync(float timeoutSeconds = 3f)
+        {
+            if (networkManager == null || !networkManager.IsListening) return;
+            networkManager.Shutdown();
+            float deadline = Time.realtimeSinceStartup + Mathf.Max(0.25f, timeoutSeconds);
+            while (networkManager != null && networkManager.IsListening && Time.realtimeSinceStartup < deadline)
+            {
+                await Task.Yield();
+            }
+            if (networkManager != null && networkManager.IsListening)
+            {
+                Debug.LogWarning("NETWORK_SHUTDOWN_TIMEOUT: forcing the local scene transition while Netcode finishes cleanup.");
+            }
         }
 
         private void EnsureReady()

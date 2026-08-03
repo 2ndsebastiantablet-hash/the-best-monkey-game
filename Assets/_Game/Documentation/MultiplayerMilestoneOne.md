@@ -74,8 +74,8 @@ The automated single-editor local lifecycle passed: host startup, owner spawn, s
 - Live online smoke: Unity Services initialized, anonymous authentication succeeded, a private Relay-backed session was created/joined with the exact custom-code mapping, the host player spawned, and leave cleanup passed
 - Online test limitation: one live service host was exercised; a second online client and two physical Quest headsets were not tested
 - Android Quest: ARM64/IL2CPP build succeeded with 0 errors
-- APK: `Build/TheBestMonkeyGame-Multiplayer.apk` (ignored by Git), 61,205,687 bytes
-- APK SHA-256: `46F597B2E3B95AC607CE376EBC40BDC0FD23A743279FF15506BB711E684FCEFC`
+- Latest APK (rebuilt after the in-game menu milestone): `Build/TheBestMonkeyGame-Multiplayer.apk` (ignored by Git), 61,257,239 bytes
+- Latest APK SHA-256: `BF0C4507C7F6AFCE2B66A7976FAF29FB1CBE1317CFF7CE718A19985FC737F846`
 
 The Android build reported optional OpenXR input-control migration notices and a batch-editor Unity Services linkage-state notice (the build process was not signed into the Unity Editor account). Runtime UGS initialization/authentication and a Relay-backed session were independently verified successfully against the serialized Cloud Project ID. If this repository is cloned into a different Unity organization, link it through **Edit > Project Settings > Services** and enable Authentication, Lobby, and Relay for the linked Cloud project.
 

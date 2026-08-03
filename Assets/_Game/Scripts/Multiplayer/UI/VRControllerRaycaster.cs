@@ -9,27 +9,31 @@ namespace TheBestMonkeyGame.Multiplayer
         [SerializeField] private float maxDistance = 12f;
         [SerializeField] private LayerMask interactionMask = ~0;
         [SerializeField] private LineRenderer line;
+        [SerializeField] private XRNode controllerNode = XRNode.RightHand;
 
         private InputDevice device;
         private VRRayTarget hovered;
         private bool triggerWasPressed;
 
-        public void Configure(LineRenderer lineRenderer, float distance = 12f)
+        public void Configure(LineRenderer lineRenderer, XRNode node = XRNode.RightHand, float distance = 12f)
         {
             line = lineRenderer;
+            controllerNode = node;
             maxDistance = distance;
         }
 
         private void OnEnable()
         {
-            device = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+            device = InputDevices.GetDeviceAtXRNode(controllerNode);
             triggerWasPressed = false;
+            if (line != null) line.enabled = true;
         }
 
         private void OnDisable()
         {
             hovered?.SetHovered(false);
             hovered = null;
+            if (line != null) line.enabled = false;
         }
 
         private void Update()
@@ -52,7 +56,7 @@ namespace TheBestMonkeyGame.Multiplayer
                 line.SetPosition(1, transform.position + transform.forward * distance);
             }
 
-            if (!device.isValid) device = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+            if (!device.isValid) device = InputDevices.GetDeviceAtXRNode(controllerNode);
             bool pressed = device.TryGetFeatureValue(CommonUsages.triggerButton, out bool value) && value;
             if (pressed && !triggerWasPressed && hovered != null) hovered.Trigger(hitUi ? hit.point : transform.position + transform.forward * maxDistance);
             triggerWasPressed = pressed;

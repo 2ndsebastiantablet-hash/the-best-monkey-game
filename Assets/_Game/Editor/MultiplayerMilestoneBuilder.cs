@@ -181,7 +181,8 @@ namespace TheBestMonkeyGame.Editor
             Transform left = RequireChildRecursive(localRoot.transform, "Left Controller Target");
             Transform right = RequireChildRecursive(localRoot.transform, "Right Controller Target");
 
-            VRTurningController turning = localRoot.AddComponent<VRTurningController>();
+            VRTurningController turning = localRoot.GetComponent<VRTurningController>();
+            if (turning == null) turning = localRoot.AddComponent<VRTurningController>();
             turning.Configure(localRoot.transform, head);
             DevelopmentPoseSimulator simulator = localRoot.AddComponent<DevelopmentPoseSimulator>();
             simulator.Configure(head, left, right);
