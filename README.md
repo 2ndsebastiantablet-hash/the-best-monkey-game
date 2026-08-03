@@ -1,6 +1,6 @@
 # The Best Monkey Game — Unity VR prototype
 
-A Unity 6/Meta Quest prototype built around Another Axiom's official open-source GorillaLocomotion. The current revision adds floor-correct OpenXR tracking, a temporary gorilla avatar, and the imported Giggle Farts map while retaining the original locomotion test scene.
+A Unity 6/Meta Quest prototype built around Another Axiom's official open-source GorillaLocomotion. The current revision corrects the imported map's world scale, keeps the player on a floor-level OpenXR origin, and restores the original visible sphere hands.
 
 ## Project versions and targets
 
@@ -30,33 +30,37 @@ Important assets:
 - Reusable player: `Assets/_Game/Prefabs/VRPlayer.prefab`
 - Map prefab: `Assets/_Game/Prefabs/Environment/GiggleFartsMap.prefab`
 - Map source: `Assets/ThirdParty/Map/giggle_farts_map.glb`
-- Temporary model source and generated meshes: `Assets/ThirdParty/GorillaModel`
+- Archived model source and license: `Assets/ThirdParty/GorillaModel`
 - Gameplay scripts: `Assets/_Game/Scripts`
 - Official locomotion source: `Assets/ThirdParty/GorillaLocomotion`
 
+## Corrected map scale
+
+The GLB was originally normalized to a 30 m footprint, but its vertical architecture then measured only about 0.72 m at a representative doorway. This was a map-scale mismatch: the XR player and tracked poses were already using Unity's normal one-unit-per-meter scale.
+
+The complete `GiggleFartsMap` root is now uniformly scaled by **2.85** on X, Y, and Z. Nothing in `VRPlayer`, the XR origin, camera, controller targets, body collider, hand followers, or physics reach is scaled. The corrected rendered bounds are approximately **81.77 × 4.21 × 85.50 m**. Representative architecture now measures:
+
+- Doorway: **2.05 m**
+- Low wall: **1.03 m**
+- Corridor ceiling: **2.63 m**
+
+The same four substantial static, non-convex `MeshCollider` meshes are regenerated from the map geometry and inherit that uniform root scale. Two decorative eight-triangle card meshes intentionally remain non-collidable. Every collidable mesh is on the `Locomotion` layer, tagged `LocomotionSurface`, marked static, and has the official `Surface` component.
+
 ## Floor and tracking correction
 
-The old rig authored the editor fallback headset at `Y = 1.65` and controllers at `Y = 1.2`, but it did not explicitly request a floor tracking origin. On a device-origin XR runtime, tracked standing height could therefore be combined with a virtual standing-height offset, leaving the camera and hands too high to reach the floor.
+`XRFloorTrackingOrigin` requests `TrackingOriginModeFlags.Floor` from every running XR input subsystem. `XR Origin` remains at local position zero and `PlayerFloorOffset` defaults to zero; its ±10 cm setting is only for small hardware/user calibration. There is no artificial standing-height camera offset, controller offset, or scale compensation.
 
-`XRFloorTrackingOrigin` now requests `TrackingOriginModeFlags.Floor` from each running XR input subsystem. `TrackingSpace` stays at zero and `PlayerFloorOffset` defaults to zero; its ±10 cm range is only for small hardware/user calibration. No artificial 1.65 m camera offset remains. The editor-only fallback pose is near the floor so non-XR Play Mode does not imitate the old bug.
+The scene's `PlayerSpawn` is exactly on a raycast-selected upward-facing map surface at approximately **(0, 0.144, 0)**. The whole `VRPlayer` root starts there at scale **(1, 1, 1)**. The editor-only camera/controller fallback poses are close to the floor so non-XR Play Mode cannot recreate the earlier doubled-height result.
 
-The body capsule follows the tracked head but begins 1.5 cm above the player-root floor. Spawn and respawn move the whole player root, zero rigidbody motion, wait for fresh OpenXR poses, synchronize transforms, and then reinitialize GorillaLocomotion history. This prevents a stale hand/head history from launching the player after a reset.
+The body capsule follows the tracked head and keeps 1.5 cm of ground clearance. Spawn and respawn move the whole player root, clear rigidbody motion, wait for fresh tracked poses, synchronize transforms, and reinitialize GorillaLocomotion history. This preserves real headset height and hand reach while preventing stale tracking history from launching the player after a reset.
 
-## Temporary gorilla model and hands
+## Player hierarchy and hands
 
-The supplied archive contains one connected, unrigged binary STL; it has no bones, armature, named hand objects, or separable skinned hand meshes. Its included README attributes the model to Thingiverse user CloverPatch170, and the supplied license is a Creative Commons Public Domain Dedication. Those original files are preserved under `Assets/ThirdParty/GorillaModel/License`.
+The temporary gorilla body, extracted visual-hand meshes, `Visuals` hierarchy, and `GorillaVisualRig` component/script were removed. The supplied source ZIP/STL, attribution, reference image, and license remain archived for possible future use, but there is no player model instantiated in the prefab or scene.
 
-The complete source model is displayed as a collider-free temporary body. It follows the tracked headset in X/Z and follows headset yaw only, so headset pitch and roll do not tilt the body. The two visible controller hands are meshes extracted from the actual low hand/finger regions of that STL and attached to the physics followers. They are source-derived static visual meshes, not animated/skinned bones.
+The original left and right sphere followers are visible again and are the only hand representations. Each hand has one enabled primitive `MeshRenderer` and one trigger `SphereCollider`, has no visual child object or duplicate collider, and remains the authoritative GorillaLocomotion hand transform. Left and right retain their distinct original materials.
 
-The original left/right sphere followers remain the authoritative locomotion hands. Their `SphereCollider` components and transforms are enabled and unchanged for collision, but their primitive `MeshRenderer` components are disabled. The source-derived hand visuals are children of those spheres and have no colliders, so appearance cannot change reach or locomotion behavior.
-
-## Imported map and collisions
-
-glTFast imports the GLB hierarchy, material splits, textures, and meshes. The source was Z-up and included embedded Sketchfab/FBX unit transforms, so the generated map prefab applies the required axis correction, centers the arena, places its lowest rendered point on `Y = 0`, and normalizes the footprint to **28.69 × 30.00 m**. The playable height range is approximately **1.48 m**.
-
-Collision uses four static, non-convex `MeshCollider` components—one for each substantial material-separated mesh, about 20,000 source triangles total. Two decorative eight-triangle card meshes intentionally have no collider. Every collidable mesh is on the `Locomotion` layer, tagged `LocomotionSurface`, marked static, and has the official `Surface` component. This avoids creating more than 1,600 tiny component colliders while retaining the map's playable geometry.
-
-`PlayerSpawn` is at approximately `(0, 0.071, 0)`, two centimeters above a raycast-selected upward-facing map surface, and faces toward the map center. `FallResetArea` spans the imported bounds below the arena.
+The reusable hierarchy is intentionally compact: `VRPlayer`, `XR Origin`, `Main Camera`, `Head Collider`, two controller targets, `Body Collider`, and `GorillaLocomotion` with the two sphere hands. The prefab validation rejects duplicate cameras, missing scripts, leftover model objects, non-unit rig scale, and hand children.
 
 ## Controls
 
@@ -68,14 +72,14 @@ Collision uses four static, non-convex `MeshCollider` components—one for each 
 
 ## Validation and Android build
 
-The checked-in validation command verifies the floor-origin prefab, invisible authoritative hand renderers, collider-free visual hands/body, four map colliders and surfaces, spawn wiring, build-scene order, and Android OpenXR configuration. It then runs 180 Play Mode frames while collecting errors:
+The validation checks the clean floor-origin prefab, visible authoritative sphere hands, absence of the temporary model, unit player/XR scales, map scale and architectural measurements, four map colliders/surfaces, exact floor spawn, build-scene order, and Android OpenXR configuration. It then runs 180 Play Mode frames while collecting errors:
 
 ```powershell
 & 'C:\Program Files\Unity\Hub\Editor\6000.0.34f1\Editor\Unity.exe' `
   -batchmode `
   -projectPath '<repository-path>' `
   -executeMethod TheBestMonkeyGame.Editor.ProjectVerification.Run `
-  -logFile '<repository-path>\Build\RevisionPlayMode.log'
+  -logFile '<repository-path>\Build\ScalePlayMode.log'
 ```
 
 The Android smoke build command is:
@@ -85,7 +89,7 @@ The Android smoke build command is:
   -batchmode `
   -projectPath '<repository-path>' `
   -executeMethod TheBestMonkeyGame.Editor.RevisionBootstrap.BuildAndroidSmokeTest `
-  -logFile '<repository-path>\Build\RevisionAndroidBuild.log'
+  -logFile '<repository-path>\Build\ScaleAndroidBuild.log'
 ```
 
 It produces `Build/TheBestMonkeyGame.apk`. The local `Build` directory and APK are intentionally ignored by Git.
@@ -94,24 +98,18 @@ It produces `Build/TheBestMonkeyGame.apk`. The local `Build` directory and APK a
 
 1. Enable developer mode for the headset in the Meta Horizon mobile app and restart if required.
 2. Connect an unlocked headset with a data-capable USB cable and accept **Allow USB debugging**.
-3. Confirm `adb devices` shows the headset as `device`, then run:
-
-   ```powershell
-   adb install -r .\Build\TheBestMonkeyGame.apk
-   ```
-
+3. Confirm `adb devices` shows the headset as `device`, then run `adb install -r .\Build\TheBestMonkeyGame.apk`.
 4. Launch the app from **App Library > Unknown Sources**.
 
-## Known limitations and tuning points
+## Known limitations
 
-- Physical Quest hardware feel and actual room-floor alignment still require an on-headset test. If needed, tune only the centimeter-scale `PlayerFloorOffset`; do not restore a standing-height camera offset.
-- The avatar is an unrigged temporary model. Hand visual rotation/scale, body scale/offset, first-person clipping, and eventual replacement with a rigged avatar need headset review.
-- The map collider grouping is practical for this prototype, but collision cost, materials, lighting, texture compression, and the chosen central spawn should be profiled/tuned on each supported Quest model.
-- OpenXR reports two optional build recommendations about newer pose and thumbstick control types; neither blocks the successful build or the current tracked-pose implementation.
+- Physical room-floor alignment, doorway feel, and collision comfort still require an on-headset test. If a headset-specific adjustment is needed, tune only the centimeter-scale `PlayerFloorOffset`; do not restore a standing-height camera offset or rescale the player.
+- The archived gorilla mesh is intentionally not displayed. A future avatar should be a properly rigged model whose visuals follow the existing authoritative head and sphere-hand transforms without adding locomotion colliders.
+- Map collision cost, lighting, texture compression, and the central spawn should still be profiled on each supported Quest model.
 - There is no multiplayer, grabbing, haptics, menu, final audio, comfort turning, or production keystore yet.
 
 ## Licensing
 
-GorillaLocomotion is from Another Axiom's official repository at commit `bc42e959cf3e69178f9147d89bd3ffeab1c432c4` and is licensed under MIT; see `Assets/ThirdParty/Licenses/Another-Axiom-GorillaLocomotion-MIT.txt`. The temporary model's supplied public-domain dedication and attribution text are preserved with the asset.
+GorillaLocomotion is from Another Axiom's official repository at commit `bc42e959cf3e69178f9147d89bd3ffeab1c432c4` and is licensed under MIT; see `Assets/ThirdParty/Licenses/Another-Axiom-GorillaLocomotion-MIT.txt`. The archived model's supplied public-domain dedication and attribution text are preserved with its source files.
 
 The GLB's embedded metadata identifies **Giggle Fart's Map** by **Zman** as CC BY 4.0. Its source, author, license URL, and modification note are recorded in `Assets/ThirdParty/Map/ATTRIBUTION.md`. Original project code has not yet been assigned a separate license.

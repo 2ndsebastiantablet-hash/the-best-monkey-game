@@ -9,6 +9,7 @@
 .utmp/
 [Mm]emoryCaptures/
 [Rr]ecordings/
+*_BurstDebugInformation_DoNotShip/
 
 # IDE and tooling
 .vs/
