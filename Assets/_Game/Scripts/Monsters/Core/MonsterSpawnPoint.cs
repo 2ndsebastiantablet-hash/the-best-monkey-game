@@ -1,5 +1,5 @@
-using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -9,7 +9,16 @@ namespace TheBestMonkeyGame.Monsters
     {
         private static readonly List<MonsterSpawnPoint> Points = new List<MonsterSpawnPoint>();
 
+        [SerializeField] private string region = "Distant Map Region";
+
         public static int Count => Points.Count;
+        public static IReadOnlyList<MonsterSpawnPoint> ActivePoints => Points;
+        public string Region => region;
+
+        public void Configure(string regionName)
+        {
+            region = regionName;
+        }
 
         private void OnEnable()
         {
@@ -18,41 +27,54 @@ namespace TheBestMonkeyGame.Monsters
 
         private void OnDisable() => Points.Remove(this);
 
-        public static Transform FindSafePoint(Transform playerHead, float minimumDistance, LayerMask obstructionMask)
-        {
-            return FindSafePoint(playerHead != null ? new[] { playerHead } : Array.Empty<Transform>(), minimumDistance, obstructionMask);
-        }
-
-        public static Transform FindSafePoint(IReadOnlyList<Transform> playerHeads, float minimumDistance, LayerMask obstructionMask)
+        public static MonsterSpawnPoint FindSafePoint(
+            Transform playerHead,
+            float minimumDistance,
+            LayerMask obstructionMask,
+            MonsterSpawnPoint excludedPoint = null,
+            Transform resettingMonster = null)
         {
             if (Points.Count == 0) return null;
-            int start = UnityEngine.Random.Range(0, Points.Count);
-            for (int offset = 0; offset < Points.Count; offset++)
+
+            MonsterBrain[] monsters = FindObjectsByType<MonsterBrain>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            return Points
+                .Where(point => point != null && point.isActiveAndEnabled && point != excludedPoint)
+                .Where(point => point.IsSafeFor(playerHead, minimumDistance, obstructionMask, monsters, resettingMonster))
+                .OrderByDescending(point => playerHead == null ? 0f : Vector3.Distance(point.transform.position, playerHead.position))
+                .FirstOrDefault();
+        }
+
+        public bool IsSafeFor(
+            Transform playerHead,
+            float minimumDistance,
+            LayerMask obstructionMask,
+            IReadOnlyList<MonsterBrain> monsters,
+            Transform ignoredMonster = null)
+        {
+            if (!NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 1.5f, NavMesh.AllAreas)) return false;
+            if (Vector3.Distance(hit.position, transform.position) > 1.25f) return false;
+
+            if (playerHead != null)
             {
-                MonsterSpawnPoint point = Points[(start + offset) % Points.Count];
-                if (point == null || !point.isActiveAndEnabled) continue;
-                bool unsafeForPlayer = false;
-                for (int index = 0; index < playerHeads.Count; index++)
+                if (Vector3.Distance(transform.position, playerHead.position) < minimumDistance) return false;
+                Vector3 target = transform.position + Vector3.up;
+                Vector3 delta = target - playerHead.position;
+                if (delta.sqrMagnitude > 0.01f &&
+                    !Physics.Raycast(playerHead.position, delta.normalized, delta.magnitude, obstructionMask, QueryTriggerInteraction.Ignore))
                 {
-                    Transform playerHead = playerHeads[index];
-                    if (playerHead == null) continue;
-                    if (Vector3.Distance(point.transform.position, playerHead.position) < minimumDistance)
-                    {
-                        unsafeForPlayer = true;
-                        break;
-                    }
-                    Vector3 delta = point.transform.position + Vector3.up - playerHead.position;
-                    if (!Physics.Raycast(playerHead.position, delta.normalized, delta.magnitude, obstructionMask, QueryTriggerInteraction.Ignore))
-                    {
-                        unsafeForPlayer = true;
-                        break;
-                    }
+                    return false;
                 }
-                if (unsafeForPlayer) continue;
-                if (!NavMesh.SamplePosition(point.transform.position, out _, 1f, NavMesh.AllAreas)) continue;
-                return point.transform;
             }
-            return null;
+
+            if (monsters != null)
+            {
+                foreach (MonsterBrain monster in monsters)
+                {
+                    if (monster == null || monster.transform == ignoredMonster) continue;
+                    if (Vector3.Distance(transform.position, monster.transform.position) < 4f) return false;
+                }
+            }
+            return true;
         }
     }
 }

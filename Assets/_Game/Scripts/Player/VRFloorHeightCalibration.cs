@@ -1,25 +1,24 @@
-using GorillaLocomotion;
 using UnityEngine;
 using UnityEngine.XR;
 
 namespace TheBestMonkeyGame
 {
     /// <summary>
-    /// Applies a configurable Y correction to the XR tracking-space parent. The
-    /// tracked camera and controllers remain fully driven by OpenXR beneath it.
+    /// Applies one explicit floor correction to the pose-space parent beneath the
+    /// floor-aligned XR Origin. Camera and controller local poses remain OpenXR-owned.
     /// </summary>
     [DefaultExecutionOrder(-350)]
     public sealed class VRFloorHeightCalibration : MonoBehaviour
     {
-        public const float DefaultVerticalOffset = -0.75f;
+        public const float DefaultPlayerFloorOffset = -1.45f;
 
-        [SerializeField] private Transform trackingSpace;
+        [SerializeField] private Transform poseSpace;
         [SerializeField] private Transform leftHand;
         [SerializeField] private Transform rightHand;
         [SerializeField] private PlayerRespawn respawn;
-        [SerializeField, Range(-2f, 1f)] private float verticalOffset = DefaultVerticalOffset;
+        [SerializeField, Range(-2f, 1f)] private float playerFloorOffset = DefaultPlayerFloorOffset;
         [SerializeField, Range(1f, 4f)] private float calibrationHoldSeconds = 2f;
-        [SerializeField, Range(0.03f, 0.3f)] private float desiredHandClearance = 0.12f;
+        [SerializeField, Range(0f, 0.15f)] private float desiredHandClearance = 0.02f;
         [SerializeField, Range(2f, 10f)] private float recalibrationCooldown = 4f;
 
         private InputDevice leftDevice;
@@ -27,21 +26,21 @@ namespace TheBestMonkeyGame
         private float heldTime;
         private float cooldownUntil;
 
-        public float VerticalOffset => verticalOffset;
-        public Transform TrackingSpace => trackingSpace;
+        public float PlayerFloorOffset => playerFloorOffset;
+        public Transform PoseSpace => poseSpace;
 
         public void Configure(
             Transform space,
             Transform left,
             Transform right,
             PlayerRespawn playerRespawn,
-            float offset = DefaultVerticalOffset)
+            float offset = DefaultPlayerFloorOffset)
         {
-            trackingSpace = space;
+            poseSpace = space;
             leftHand = left;
             rightHand = right;
             respawn = playerRespawn;
-            verticalOffset = Mathf.Clamp(offset, -2f, 1f);
+            playerFloorOffset = Mathf.Clamp(offset, -2f, 1f);
             ApplyOffset();
         }
 
@@ -54,7 +53,6 @@ namespace TheBestMonkeyGame
 
         private void Update()
         {
-            ApplyOffset();
             if (Time.unscaledTime < cooldownUntil)
             {
                 heldTime = 0f;
@@ -73,44 +71,38 @@ namespace TheBestMonkeyGame
             }
 
             heldTime += Time.unscaledDeltaTime;
-            if (heldTime >= calibrationHoldSeconds)
-            {
-                RecalibrateFromCurrentHands();
-                heldTime = 0f;
-                cooldownUntil = Time.unscaledTime + recalibrationCooldown;
-            }
+            if (heldTime < calibrationHoldSeconds) return;
+
+            RecalibrateFromCurrentHands();
+            heldTime = 0f;
+            cooldownUntil = Time.unscaledTime + recalibrationCooldown;
         }
 
-        public void SetVerticalOffset(float offset)
+        public void SetPlayerFloorOffset(float offset)
         {
-            verticalOffset = Mathf.Clamp(offset, -2f, 1f);
+            playerFloorOffset = Mathf.Clamp(offset, -2f, 1f);
             ApplyOffset();
             respawn?.StabilizeAfterCalibration();
         }
 
         public void RecalibrateFromCurrentHands()
         {
-            if (trackingSpace == null || leftHand == null || rightHand == null)
-            {
-                Debug.LogWarning("VR floor recalibration skipped because tracked hand references are unavailable.");
-                return;
-            }
+            if (poseSpace == null || leftHand == null || rightHand == null) return;
 
-            float virtualFloorY = transform.position.y;
+            float floorY = transform.position.y;
             float lowestHandY = Mathf.Min(leftHand.position.y, rightHand.position.y);
-            float correction = virtualFloorY + desiredHandClearance - lowestHandY;
-            verticalOffset = Mathf.Clamp(verticalOffset + correction, -2f, 1f);
+            float correction = floorY + desiredHandClearance - lowestHandY;
+            playerFloorOffset = Mathf.Clamp(playerFloorOffset + correction, -2f, 1f);
             ApplyOffset();
             respawn?.StabilizeAfterCalibration();
-            Debug.Log($"VR_FLOOR_RECALIBRATED offset={verticalOffset:F3} handClearance={desiredHandClearance:F2}");
         }
 
         private void ApplyOffset()
         {
-            if (trackingSpace != null)
-            {
-                trackingSpace.localPosition = new Vector3(0f, verticalOffset, 0f);
-            }
+            if (poseSpace == null) return;
+            poseSpace.localPosition = new Vector3(0f, playerFloorOffset, 0f);
+            poseSpace.localRotation = Quaternion.identity;
+            poseSpace.localScale = Vector3.one;
         }
     }
 }

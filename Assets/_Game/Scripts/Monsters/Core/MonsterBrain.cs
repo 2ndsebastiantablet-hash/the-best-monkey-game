@@ -21,8 +21,8 @@ namespace TheBestMonkeyGame.Monsters
         [SerializeField] protected MonsterPerception perception;
         [SerializeField] protected MonsterAnimationController animationController;
         [SerializeField] protected MonsterAudioController audioController;
-        [SerializeField] protected MonsterJumpscareController jumpscareController;
-        [SerializeField, Min(0f)] private float startupGracePeriod = 5f;
+        [SerializeField] private Transform visualRoot;
+        [SerializeField, Min(0f)] private float startupGracePeriod = 7f;
 
         protected Transform playerRoot;
         protected Transform playerHead;
@@ -30,25 +30,29 @@ namespace TheBestMonkeyGame.Monsters
         protected float stateEnteredAt;
         protected Vector3 lastKnownPlayerPosition;
 
+        private MonsterSpawnPoint lastSpawnPoint;
+
         public MonsterState State { get; private set; } = MonsterState.Dormant;
         public string MonsterId => gameObject.name;
-        public Transform VisualRoot => jumpscareController != null ? jumpscareController.VisualRoot : null;
+        public Transform VisualRoot => visualRoot;
         public MonsterNavigation Navigation => navigation;
         public MonsterPerception Perception => perception;
+        public float StartupGracePeriod => startupGracePeriod;
+        public virtual float MinimumSpawnDistance => 30f;
 
         public virtual void ConfigureShared(
             MonsterNavigation monsterNavigation,
             MonsterPerception monsterPerception,
             MonsterAnimationController monsterAnimation,
             MonsterAudioController monsterAudio,
-            MonsterJumpscareController monsterJumpscare,
-            float gracePeriod = 5f)
+            Transform monsterVisual,
+            float gracePeriod = 7f)
         {
             navigation = monsterNavigation;
             perception = monsterPerception;
             animationController = monsterAnimation;
             audioController = monsterAudio;
-            jumpscareController = monsterJumpscare;
+            visualRoot = monsterVisual;
             startupGracePeriod = gracePeriod;
         }
 
@@ -73,39 +77,56 @@ namespace TheBestMonkeyGame.Monsters
             TickState();
         }
 
+        public void PlaceAtStartup(MonsterSpawnPoint point)
+        {
+            if (point == null) return;
+            lastSpawnPoint = point;
+            navigation.Warp(point.transform.position);
+            navigation.StopImmediately();
+            ResetBehaviorMemory();
+            SetKillTriggersArmed(true);
+            State = MonsterState.Dormant;
+            stateEnteredAt = Time.time;
+        }
+
         public bool TryBeginKill(Collider playerCollider)
         {
-            if (State == MonsterState.Killing || State == MonsterState.Resetting || playerRespawn == null || playerRespawn.IsSpawnProtected)
+            if (State == MonsterState.Dormant || State == MonsterState.Killing || State == MonsterState.Resetting ||
+                playerRespawn == null || playerRespawn.IsSpawnProtected)
             {
                 return false;
             }
-            if (playerCollider.GetComponentInParent<PlayerRespawn>() != playerRespawn)
-            {
-                return false;
-            }
+            if (playerCollider.GetComponentInParent<PlayerRespawn>() != playerRespawn) return false;
+
+            PlayerDeathController death = playerRoot.GetComponent<PlayerDeathController>();
+            if (death == null || death.DeathActive) return false;
 
             ChangeState(MonsterState.Killing);
             navigation.StopImmediately();
-            MonsterKillTrigger[] triggers = GetComponentsInChildren<MonsterKillTrigger>(true);
-            foreach (MonsterKillTrigger trigger in triggers) trigger.SetArmed(false);
-            PlayerDeathController death = playerRoot.GetComponent<PlayerDeathController>();
-            if (death != null) death.BeginDeath(this);
+            SetKillTriggersArmed(false);
+            death.BeginDeath(this);
             return true;
         }
 
-        public virtual void ResetAfterJumpscare()
+        public virtual void ResetAfterPlayerDeath()
         {
             ChangeState(MonsterState.Resetting);
-            Transform safe = MonsterSpawnPoint.FindSafePoint(playerHead, 20f, perception != null ? perception.ObstructionMask : 0);
-            if (safe != null) navigation.Warp(safe.position);
-            foreach (MonsterKillTrigger trigger in GetComponentsInChildren<MonsterKillTrigger>(true)) trigger.SetArmed(true);
-            ChangeState(MonsterState.Roaming);
-        }
-
-        public void SuspendForJumpscare()
-        {
             navigation.StopImmediately();
-            enabled = false;
+            MonsterSpawnPoint safe = MonsterSpawnPoint.FindSafePoint(
+                playerHead,
+                MinimumSpawnDistance,
+                perception != null ? perception.ObstructionMask : 0,
+                lastSpawnPoint,
+                transform);
+            if (safe != null)
+            {
+                navigation.Warp(safe.transform.position);
+                lastSpawnPoint = safe;
+            }
+
+            ResetBehaviorMemory();
+            SetKillTriggersArmed(true);
+            ChangeState(MonsterState.Roaming);
         }
 
         public void ActivateImmediatelyForDevelopment()
@@ -113,14 +134,8 @@ namespace TheBestMonkeyGame.Monsters
             if (State == MonsterState.Dormant) ChangeState(MonsterState.Roaming);
         }
 
-        public void ResumeAfterJumpscare()
-        {
-            enabled = true;
-            ResetAfterJumpscare();
-        }
-
         protected abstract void TickState();
-
+        protected virtual void ResetBehaviorMemory() { }
         protected virtual void OnStateChanged(MonsterState previous, MonsterState next) { }
 
         protected void ChangeState(MonsterState next)
@@ -133,6 +148,14 @@ namespace TheBestMonkeyGame.Monsters
         }
 
         protected float StateTime => Time.time - stateEnteredAt;
+
+        private void SetKillTriggersArmed(bool armed)
+        {
+            foreach (MonsterKillTrigger trigger in GetComponentsInChildren<MonsterKillTrigger>(true))
+            {
+                trigger.SetArmed(armed);
+            }
+        }
 
         private void ResolvePlayer()
         {

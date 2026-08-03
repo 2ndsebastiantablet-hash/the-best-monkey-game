@@ -21,10 +21,10 @@ namespace TheBestMonkeyGame.Editor
         public const string MapPrefabPath = "Assets/_Game/Prefabs/Environment/GiggleFartsMap.prefab";
         public const string MainScenePath = "Assets/_Game/Scenes/MainMap.unity";
         public const string TestScenePath = "Assets/_Game/Scenes/LocomotionTest.unity";
-        public const float MapScaleMultiplier = 2.85f;
-        public const float MeasuredDoorwayHeight = 2.05f;
-        public const float MeasuredCorridorCeilingHeight = 2.63f;
-        public const float MeasuredLowWallHeight = 1.03f;
+        public const float MapScaleMultiplier = 3.50f;
+        public const float MeasuredDoorwayHeight = 2.52f;
+        public const float MeasuredCorridorCeilingHeight = 3.23f;
+        public const float MeasuredLowWallHeight = 1.26f;
 
         private const string MapSourcePath = "Assets/ThirdParty/Map/giggle_farts_map.glb";
         private const string LeftHandMaterialPath = "Assets/_Game/Materials/LeftHand.mat";
@@ -112,9 +112,19 @@ namespace TheBestMonkeyGame.Editor
                 RemoveComponentByTypeName(root, "GorillaVisualRig");
 
                 Transform tracking = RequireChild(root.transform, "TrackingSpace", "XR Origin");
-                Transform cameraTransform = RequireChild(tracking, "Head", "Main Camera");
-                Transform leftController = RequireChild(tracking, "LeftController", "Left Controller Target");
-                Transform rightController = RequireChild(tracking, "RightController", "Right Controller Target");
+                Transform poseSpace = tracking.Find("Tracking Space Offset");
+                if (poseSpace == null)
+                {
+                    GameObject poseObject = new GameObject("Tracking Space Offset");
+                    poseSpace = poseObject.transform;
+                    poseSpace.SetParent(tracking, false);
+                }
+                Transform cameraTransform = RequirePoseChild(tracking, poseSpace, "Head", "Main Camera");
+                Transform leftController = RequirePoseChild(tracking, poseSpace, "LeftController", "Left Controller Target");
+                Transform rightController = RequirePoseChild(tracking, poseSpace, "RightController", "Right Controller Target");
+                cameraTransform.SetParent(poseSpace, false);
+                leftController.SetParent(poseSpace, false);
+                rightController.SetParent(poseSpace, false);
                 Transform bodyTransform = RequireChild(root.transform, "BodyCollider", "Body Collider");
                 Transform locomotionObjects = RequireChild(root.transform, "HandCollisionFollowers", "GorillaLocomotion");
                 Transform leftHand = RequireChild(locomotionObjects, "LeftHand", "Left Hand Sphere");
@@ -126,17 +136,20 @@ namespace TheBestMonkeyGame.Editor
                 tracking.localPosition = Vector3.zero;
                 tracking.localRotation = Quaternion.identity;
                 tracking.localScale = Vector3.one;
+                poseSpace.name = "Tracking Space Offset";
+                poseSpace.localPosition = new Vector3(0f, VRFloorHeightCalibration.DefaultPlayerFloorOffset, 0f);
+                poseSpace.localRotation = Quaternion.identity;
+                poseSpace.localScale = Vector3.one;
 
                 cameraTransform.name = "Main Camera";
-                // Editor-only non-XR fallback. After the -0.75 m calibration this
-                // leaves the test camera 0.20 m above the floor, never at desktop height.
-                cameraTransform.localPosition = new Vector3(0f, 0.95f, 0f);
+                cameraTransform.localPosition = Vector3.zero;
+                cameraTransform.localRotation = Quaternion.identity;
                 cameraTransform.localScale = Vector3.one;
                 leftController.name = "Left Controller Target";
-                leftController.localPosition = new Vector3(-0.22f, 0.85f, 0.18f);
+                leftController.localPosition = new Vector3(-0.22f, 0f, 0.18f);
                 leftController.localScale = Vector3.one;
                 rightController.name = "Right Controller Target";
-                rightController.localPosition = new Vector3(0.22f, 0.85f, 0.18f);
+                rightController.localPosition = new Vector3(0.22f, 0f, 0.18f);
                 rightController.localScale = Vector3.one;
 
                 XRFloorTrackingOrigin floorOrigin = root.GetComponent<XRFloorTrackingOrigin>();
@@ -173,8 +186,8 @@ namespace TheBestMonkeyGame.Editor
 
                 locomotionObjects.name = "GorillaLocomotion";
                 locomotionObjects.localScale = Vector3.one;
-                ConfigureVisibleHand(leftHand, "Left Hand Sphere", LeftHandMaterialPath, new Vector3(-0.22f, 0.85f, 0.18f));
-                ConfigureVisibleHand(rightHand, "Right Hand Sphere", RightHandMaterialPath, new Vector3(0.22f, 0.85f, 0.18f));
+                ConfigureVisibleHand(leftHand, "Left Hand Sphere", LeftHandMaterialPath, new Vector3(-0.22f, 0.02f, 0.18f));
+                ConfigureVisibleHand(rightHand, "Right Hand Sphere", RightHandMaterialPath, new Vector3(0.22f, 0.02f, 0.18f));
 
                 PlayerRespawn respawn = root.GetComponent<PlayerRespawn>();
                 if (respawn == null)
@@ -186,7 +199,7 @@ namespace TheBestMonkeyGame.Editor
                 {
                     calibration = root.AddComponent<VRFloorHeightCalibration>();
                 }
-                calibration.Configure(tracking, leftHand, rightHand, respawn, VRFloorHeightCalibration.DefaultVerticalOffset);
+                calibration.Configure(poseSpace, leftHand, rightHand, respawn, VRFloorHeightCalibration.DefaultPlayerFloorOffset);
 
                 Player player = root.GetComponent<Player>();
                 if (player == null)
@@ -200,6 +213,16 @@ namespace TheBestMonkeyGame.Editor
                 player.leftHandFollower = leftHand;
                 player.rightHandFollower = rightHand;
                 player.maxArmLength = 1.5f;
+                player.disableMovement = false;
+
+                GorillaLocomotionDiagnostics diagnostics = root.GetComponent<GorillaLocomotionDiagnostics>();
+                if (diagnostics == null) diagnostics = root.AddComponent<GorillaLocomotionDiagnostics>();
+                diagnostics.Configure(player, floorOrigin);
+                diagnostics.DiagnosticsEnabled = false;
+
+                PlayerFloorDebugGizmo gizmo = root.GetComponent<PlayerFloorDebugGizmo>();
+                if (gizmo == null) gizmo = root.AddComponent<PlayerFloorDebugGizmo>();
+                gizmo.Configure(null, tracking, poseSpace, bodyCollider, player);
 
                 Camera[] cameras = root.GetComponentsInChildren<Camera>(true);
                 if (cameras.Length != 1 || cameras[0].transform != cameraTransform)
@@ -380,7 +403,18 @@ namespace TheBestMonkeyGame.Editor
             GameObject player = (GameObject)PrefabUtility.InstantiatePrefab(playerPrefab, scene);
             player.transform.SetPositionAndRotation(spawn.transform.position, spawn.transform.rotation);
             player.transform.localScale = Vector3.one;
-            player.GetComponent<PlayerRespawn>().SpawnPoint = spawn.transform;
+            PlayerRespawn playerRespawn = player.GetComponent<PlayerRespawn>();
+            playerRespawn.SpawnPoint = spawn.transform;
+            playerRespawn.FallThreshold = mapBounds.min.y - 6f;
+            Player playerLocomotion = player.GetComponent<Player>();
+            PlayerFloorDebugGizmo floorGizmo = player.GetComponent<PlayerFloorDebugGizmo>();
+            Transform playerOrigin = player.transform.Find("XR Origin");
+            floorGizmo.Configure(
+                spawn.transform,
+                playerOrigin,
+                playerOrigin.Find("Tracking Space Offset"),
+                playerLocomotion.bodyCollider,
+                playerLocomotion);
 
             GameObject reset = new GameObject("FallResetArea");
             reset.layer = PlayerLayer;
@@ -391,11 +425,31 @@ namespace TheBestMonkeyGame.Editor
             reset.AddComponent<FallResetVolume>();
 
             CreateLighting(mapBounds);
+            Vector2 roomDimensions = MeasureHorizontalClearance(spawn.transform.position + Vector3.up * 1.2f, mapBounds);
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene, MainScenePath);
             Debug.Log(
                 $"MAIN_MAP_RESCALED spawn={spawn.transform.position:F3} bounds={mapBounds.size:F2} " +
-                $"mapScale={map.transform.localScale.x:F2}");
+                $"mapScale={map.transform.localScale.x:F2} spawnRoom={roomDimensions.x:F2}x{roomDimensions.y:F2}");
+        }
+
+        public static Vector2 MeasureHorizontalClearance(Vector3 samplePosition, Bounds mapBounds)
+        {
+            float maxDistance = Mathf.Max(mapBounds.size.x, mapBounds.size.z);
+            float x = MeasureOpposingRays(samplePosition, Vector3.right, maxDistance);
+            float z = MeasureOpposingRays(samplePosition, Vector3.forward, maxDistance);
+            return new Vector2(x, z);
+        }
+
+        private static float MeasureOpposingRays(Vector3 origin, Vector3 axis, float maxDistance)
+        {
+            float positive = Physics.Raycast(origin, axis, out RaycastHit positiveHit, maxDistance, 1 << LocomotionLayer, QueryTriggerInteraction.Ignore)
+                ? positiveHit.distance
+                : maxDistance;
+            float negative = Physics.Raycast(origin, -axis, out RaycastHit negativeHit, maxDistance, 1 << LocomotionLayer, QueryTriggerInteraction.Ignore)
+                ? negativeHit.distance
+                : maxDistance;
+            return positive + negative;
         }
 
         private static SpawnCandidate FindSpawn(Bounds bounds)
@@ -501,6 +555,18 @@ namespace TheBestMonkeyGame.Editor
                 }
             }
             throw new InvalidOperationException($"Missing required child under {root.name}: {string.Join(" or ", names)}");
+        }
+
+        private static Transform RequirePoseChild(Transform legacyParent, Transform poseSpace, params string[] names)
+        {
+            foreach (string name in names)
+            {
+                Transform child = poseSpace.Find(name);
+                if (child != null) return child;
+                child = legacyParent.Find(name);
+                if (child != null) return child;
+            }
+            throw new InvalidOperationException($"Missing tracked pose child: {string.Join(" or ", names)}");
         }
 
         private static void RemoveComponentByTypeName(GameObject gameObject, string typeName)

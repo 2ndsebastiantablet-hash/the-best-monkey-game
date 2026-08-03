@@ -19,6 +19,7 @@ namespace TheBestMonkeyGame.Editor
         public const string TiptoePrefabPath = "Assets/_Game/Prefabs/Monsters/Tiptoe.prefab";
         public const string StatuePrefabPath = "Assets/_Game/Prefabs/Monsters/Statue.prefab";
         public const string NavMeshDataPath = "Assets/_Game/Navigation/MainMapNavMesh.asset";
+        public const string ExperimentalJumpscareScenePath = "Assets/_Game/Scenes/Experimental/JumpscareRoom.unity";
         public const float TiptoeTargetHeight = 1.7f;
         public const float StatueTargetHeight = 1.9f;
         public const int SpawnPointCount = 8;
@@ -26,7 +27,7 @@ namespace TheBestMonkeyGame.Editor
         private const string TiptoeSourcePath = "Assets/ThirdParty/Monsters/Tiptoe/tiptoe.glb";
         private const string StatueSourcePath = "Assets/ThirdParty/Monsters/Statue/statue.glb";
         private const string PlaceholderAudioPath = "Assets/_Game/Audio/Monsters/placeholder_monster_noise.wav";
-        private const string BlackMaterialPath = "Assets/_Game/Materials/JumpscareBlack.mat";
+        private const string BlackMaterialPath = "Assets/_Game/Experimental/Jumpscares/Materials/JumpscareBlack.mat";
         private const string FadeMaterialPath = "Assets/_Game/Materials/JumpscareFade.mat";
         private const int LocomotionLayer = 8;
         private const int PlayerLayer = 9;
@@ -46,11 +47,12 @@ namespace TheBestMonkeyGame.Editor
                     "Tiptoe", TiptoeSourcePath, TiptoePrefabPath, TiptoeTargetHeight, true);
                 MonsterBuildResult statue = BuildMonster(
                     "Statue", StatueSourcePath, StatuePrefabPath, StatueTargetHeight, false);
-                BuildScene(tiptoe.prefab, statue.prefab, black);
+                BuildScene(tiptoe.prefab, statue.prefab);
+                BuildExperimentalJumpscareScene(black);
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
                 Debug.Log(
-                    $"MONSTER_REVISION_BUILD_SUCCESS floorOffset={VRFloorHeightCalibration.DefaultVerticalOffset:F2} " +
+                    $"MONSTER_REVISION_BUILD_SUCCESS floorOffset={VRFloorHeightCalibration.DefaultPlayerFloorOffset:F2} " +
                     $"tiptoeHeight={tiptoe.height:F3} tiptoeClip={tiptoe.clipName} " +
                     $"statueHeight={statue.height:F3} statueClip={statue.clipName} spawns={SpawnPointCount}");
             }
@@ -68,7 +70,11 @@ namespace TheBestMonkeyGame.Editor
                 "Assets/_Game/Prefabs/Monsters",
                 "Assets/_Game/Animation/Monsters",
                 "Assets/_Game/Audio/Monsters",
-                "Assets/_Game/Navigation"
+                "Assets/_Game/Navigation",
+                "Assets/_Game/Experimental/Jumpscares/Prefabs",
+                "Assets/_Game/Experimental/Jumpscares/Materials",
+                "Assets/_Game/Experimental/Jumpscares/Scripts",
+                "Assets/_Game/Scenes/Experimental"
             };
             foreach (string folder in folders)
             {
@@ -87,7 +93,7 @@ namespace TheBestMonkeyGame.Editor
             try
             {
                 Transform tracking = root.transform.Find("XR Origin");
-                Transform head = tracking.Find("Main Camera");
+                Transform head = tracking.Find("Tracking Space Offset/Main Camera");
                 Transform locomotionRoot = root.transform.Find("GorillaLocomotion");
                 Transform leftHand = locomotionRoot.Find("Left Hand Sphere");
                 Transform rightHand = locomotionRoot.Find("Right Hand Sphere");
@@ -114,8 +120,6 @@ namespace TheBestMonkeyGame.Editor
                     root.GetComponent<GorillaLocomotion.Player>(),
                     root.GetComponent<PlayerRespawn>(),
                     root.GetComponent<Rigidbody>(),
-                    head,
-                    root.GetComponentsInChildren<XRTrackedPose>(true),
                     new[] { leftHand.GetComponent<Renderer>(), rightHand.GetComponent<Renderer>() },
                     overlayRenderer);
                 PrefabUtility.SaveAsPrefabAsset(root, RevisionBootstrap.PlayerPrefabPath);
@@ -160,7 +164,7 @@ namespace TheBestMonkeyGame.Editor
             root.transform.localScale = Vector3.one;
             NavMeshAgent agent = root.AddComponent<NavMeshAgent>();
             MonsterNavigation navigation = root.AddComponent<MonsterNavigation>();
-            navigation.Configure(tiptoe ? 5f : 2.1f, tiptoe ? 35f : 12f, tiptoe ? 720f : 300f, tiptoe ? 0.18f : 0.3f);
+            navigation.Configure(tiptoe ? 6.5f : 2.6f, tiptoe ? 55f : 14f, tiptoe ? 720f : 360f, tiptoe ? 0.25f : 0.3f);
 
             GameObject visualRootObject = new GameObject("VisualRoot");
             visualRootObject.transform.SetParent(root.transform, false);
@@ -193,7 +197,7 @@ namespace TheBestMonkeyGame.Editor
             eyeObject.transform.SetParent(root.transform, false);
             eyeObject.transform.localPosition = new Vector3(0f, targetHeight * 0.7f, 0.12f);
             MonsterPerception perception = root.AddComponent<MonsterPerception>();
-            perception.Configure(eyeObject.transform, 1 << LocomotionLayer, tiptoe ? 30f : 15f, tiptoe ? 120f : 100f, tiptoe ? 0.15f : 0.12f);
+            perception.Configure(eyeObject.transform, 1 << LocomotionLayer, tiptoe ? 42f : 22f, tiptoe ? 120f : 100f, tiptoe ? 0.15f : 0.12f);
 
             GameObject audioObject = new GameObject("Audio");
             audioObject.transform.SetParent(root.transform, false);
@@ -211,31 +215,32 @@ namespace TheBestMonkeyGame.Editor
             killCollider.radius = 0.34f;
             killCollider.height = Mathf.Max(0.7f, targetHeight * 0.75f);
 
-            MonsterJumpscareController jumpscare = root.AddComponent<MonsterJumpscareController>();
-            jumpscare.Configure(visualRootObject.transform, audio);
             MonsterBrain brain;
             if (tiptoe)
             {
                 TiptoeBrain tiptoeBrain = root.AddComponent<TiptoeBrain>();
-                tiptoeBrain.ConfigureTiptoe(5f, 11.5f, 2f, 6.5f, 17.5f);
+                tiptoeBrain.ConfigureTiptoe(6.5f, 14.5f, 2.25f, 9f, 30f);
                 brain = tiptoeBrain;
             }
             else
             {
                 StatueBrain statueBrain = root.AddComponent<StatueBrain>();
-                statueBrain.ConfigureStatue(35f, 15f, 25f, 2f);
+                statueBrain.ConfigureStatue(48f, 22f, 25f, 2f);
                 brain = statueBrain;
             }
-            brain.ConfigureShared(navigation, perception, animation, audio, jumpscare, 5f);
+            brain.ConfigureShared(navigation, perception, animation, audio, visualRootObject.transform, 7f);
             MonsterKillTrigger killTrigger = killObject.AddComponent<MonsterKillTrigger>();
             killTrigger.Configure(brain);
 
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+            MonsterJumpscareController experimental = root.AddComponent<MonsterJumpscareController>();
+            experimental.Configure(visualRootObject.transform, audio);
+            PrefabUtility.SaveAsPrefabAsset(root, $"Assets/_Game/Experimental/Jumpscares/Prefabs/{monsterName}Jumpscare.prefab");
             UnityEngine.Object.DestroyImmediate(root);
             return new MonsterBuildResult(prefab, finalHeight, sourceClip.name);
         }
 
-        private static void BuildScene(GameObject tiptoePrefab, GameObject statuePrefab, Material blackMaterial)
+        private static void BuildScene(GameObject tiptoePrefab, GameObject statuePrefab)
         {
             Scene scene = EditorSceneManager.OpenScene(RevisionBootstrap.MainScenePath, OpenSceneMode.Single);
             GameObject oldSystems = GameObject.Find("MonsterSystems");
@@ -259,7 +264,8 @@ namespace TheBestMonkeyGame.Editor
 
             Transform playerSpawn = GameObject.Find("PlayerSpawn").transform;
             Bounds mapBounds = CalculateRendererBounds(GameObject.Find("GiggleFartsMap"));
-            List<Vector3> spawnPositions = FindSpawnPositions(mapBounds, playerSpawn.position, SpawnPointCount);
+            Vector3 playerSightOrigin = playerSpawn.position + Vector3.up * 1.35f;
+            List<Vector3> spawnPositions = FindSpawnPositions(mapBounds, playerSpawn.position, playerSightOrigin, SpawnPointCount);
             GameObject spawnRoot = new GameObject("MonsterSpawnPoints");
             spawnRoot.transform.SetParent(systems.transform, false);
             List<MonsterSpawnPoint> spawnPoints = new List<MonsterSpawnPoint>();
@@ -268,21 +274,37 @@ namespace TheBestMonkeyGame.Editor
                 GameObject point = new GameObject($"MonsterSpawnPoint_{index + 1:00}");
                 point.transform.SetParent(spawnRoot.transform, false);
                 point.transform.position = spawnPositions[index];
-                spawnPoints.Add(point.AddComponent<MonsterSpawnPoint>());
+                MonsterSpawnPoint spawnPoint = point.AddComponent<MonsterSpawnPoint>();
+                spawnPoint.Configure(GetRegionName(spawnPositions[index], mapBounds));
+                spawnPoints.Add(spawnPoint);
             }
 
-            GameObject tiptoe = (GameObject)PrefabUtility.InstantiatePrefab(tiptoePrefab, scene);
-            tiptoe.transform.position = spawnPositions[0];
-            GameObject statue = (GameObject)PrefabUtility.InstantiatePrefab(statuePrefab, scene);
-            statue.transform.position = spawnPositions[Mathf.Min(4, spawnPositions.Count - 1)];
+            MonsterSpawnPoint statueStart = spawnPoints
+                .OrderByDescending(point => Vector3.Distance(point.transform.position, playerSpawn.position))
+                .First();
+            MonsterSpawnPoint tiptoeStart = spawnPoints
+                .Where(point => point != statueStart && point.Region != statueStart.Region)
+                .OrderByDescending(point => Vector3.Distance(point.transform.position, statueStart.transform.position))
+                .First();
 
-            CreateJumpscareRoom(systems.transform, mapBounds, blackMaterial);
+            GameObject tiptoe = (GameObject)PrefabUtility.InstantiatePrefab(tiptoePrefab, scene);
+            tiptoe.transform.position = tiptoeStart.transform.position;
+            GameObject statue = (GameObject)PrefabUtility.InstantiatePrefab(statuePrefab, scene);
+            statue.transform.position = statueStart.transform.position;
+
+            Transform playerHead = GameObject.Find("VRPlayer").transform.Find("XR Origin/Tracking Space Offset/Main Camera");
+            MonsterSpawnCoordinator coordinator = systems.AddComponent<MonsterSpawnCoordinator>();
+            coordinator.Configure(tiptoe.GetComponent<TiptoeBrain>(), statue.GetComponent<StatueBrain>(), playerHead);
             Physics.SyncTransforms();
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene, RevisionBootstrap.MainScenePath);
+            Debug.Log(
+                $"MONSTER_SPAWNS_BUILT count={spawnPoints.Count} " +
+                $"tiptoeRegion={tiptoeStart.Region} tiptoePosition={tiptoeStart.transform.position:F2} " +
+                $"statueRegion={statueStart.Region} statuePosition={statueStart.transform.position:F2}");
         }
 
-        private static List<Vector3> FindSpawnPositions(Bounds bounds, Vector3 playerPosition, int count)
+        private static List<Vector3> FindSpawnPositions(Bounds bounds, Vector3 playerPosition, Vector3 playerSightOrigin, int count)
         {
             List<Vector3> candidates = new List<Vector3>();
             NavMeshPath path = new NavMeshPath();
@@ -297,9 +319,13 @@ namespace TheBestMonkeyGame.Editor
                     foreach (RaycastHit hit in hits.OrderBy(item => item.point.y))
                     {
                         if (hit.normal.y < 0.9f || !NavMesh.SamplePosition(hit.point, out NavMeshHit navHit, 2f, NavMesh.AllAreas)) continue;
-                        if (Vector3.Distance(navHit.position, playerPosition) < 12f) continue;
+                        if (Vector3.Distance(navHit.position, playerPosition) < 35f) continue;
+                        Vector3 sightTarget = navHit.position + Vector3.up;
+                        Vector3 sightDelta = sightTarget - playerSightOrigin;
+                        if (!Physics.Raycast(playerSightOrigin, sightDelta.normalized, sightDelta.magnitude, 1 << LocomotionLayer, QueryTriggerInteraction.Ignore)) continue;
+                        if (Physics.CheckCapsule(navHit.position + Vector3.up * 0.35f, navHit.position + Vector3.up * 1.65f, 0.3f, 1 << LocomotionLayer, QueryTriggerInteraction.Ignore)) continue;
                         if (!NavMesh.CalculatePath(playerPosition, navHit.position, NavMesh.AllAreas, path) || path.status != NavMeshPathStatus.PathComplete) continue;
-                        if (candidates.All(existing => Vector3.Distance(existing, navHit.position) > 2.5f)) candidates.Add(navHit.position);
+                        if (candidates.All(existing => Vector3.Distance(existing, navHit.position) > 4f)) candidates.Add(navHit.position);
                         break;
                     }
                 }
@@ -311,7 +337,7 @@ namespace TheBestMonkeyGame.Editor
             while (selected.Count < count)
             {
                 Vector3 next = candidates
-                    .Where(candidate => selected.All(existing => Vector3.Distance(existing, candidate) >= 5f))
+                    .Where(candidate => selected.All(existing => Vector3.Distance(existing, candidate) >= 12f))
                     .OrderByDescending(candidate => selected.Min(existing => Vector3.Distance(existing, candidate)))
                     .FirstOrDefault();
                 if (next == Vector3.zero) throw new InvalidOperationException("Could not distribute monster spawn points across reachable NavMesh areas.");
@@ -320,11 +346,18 @@ namespace TheBestMonkeyGame.Editor
             return selected;
         }
 
-        private static void CreateJumpscareRoom(Transform parent, Bounds mapBounds, Material blackMaterial)
+        private static string GetRegionName(Vector3 position, Bounds bounds)
         {
+            Vector3 offset = position - bounds.center;
+            if (Mathf.Abs(offset.x) >= Mathf.Abs(offset.z)) return offset.x < 0f ? "West Wing" : "East Wing";
+            return offset.z < 0f ? "South Wing" : "North Wing";
+        }
+
+        private static void BuildExperimentalJumpscareScene(Material blackMaterial)
+        {
+            Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             GameObject room = new GameObject("JumpscareRoom");
-            room.transform.SetParent(parent, false);
-            room.transform.position = new Vector3(mapBounds.max.x + 200f, -500f, mapBounds.max.z + 200f);
+            room.transform.position = Vector3.zero;
             Vector3[] positions =
             {
                 new Vector3(0f, -0.1f, 0f), new Vector3(0f, 3.1f, 0f),
@@ -371,6 +404,11 @@ namespace TheBestMonkeyGame.Editor
             AudioSource centered = room.AddComponent<AudioSource>();
             JumpscareRoomController controller = room.AddComponent<JumpscareRoomController>();
             controller.Configure(playerAnchor.transform, monsterAnchor.transform, centered);
+            controller.enabled = false;
+
+            PrefabUtility.SaveAsPrefabAsset(room, "Assets/_Game/Experimental/Jumpscares/Prefabs/JumpscareRoom.prefab");
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene, ExperimentalJumpscareScenePath);
         }
 
         private static Material EnsureMaterial(string path, string shaderName, Color color)

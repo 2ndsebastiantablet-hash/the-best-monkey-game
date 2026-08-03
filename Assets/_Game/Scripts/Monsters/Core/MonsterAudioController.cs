@@ -68,7 +68,7 @@ namespace TheBestMonkeyGame.Monsters
             source.spatialBlend = 1f;
             source.rolloffMode = AudioRolloffMode.Linear;
             source.minDistance = 1f;
-            source.maxDistance = 35f;
+            source.maxDistance = 55f;
             source.dopplerLevel = 0f;
         }
     }

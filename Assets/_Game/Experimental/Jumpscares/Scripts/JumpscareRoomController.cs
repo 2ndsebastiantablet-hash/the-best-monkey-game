@@ -5,6 +5,7 @@ namespace TheBestMonkeyGame.Monsters
 {
     public sealed class JumpscareRoomController : MonoBehaviour
     {
+        [SerializeField] private bool experimentalPlaybackEnabled;
         [SerializeField] private Transform playerAnchor;
         [SerializeField] private Transform monsterAnchor;
         [SerializeField] private AudioSource centeredAudio;
@@ -25,8 +26,10 @@ namespace TheBestMonkeyGame.Monsters
 
         public IEnumerator Run(MonsterBrain killer, PlayerDeathController player)
         {
+            // Preserved for later repair. Experimental playback is opt-in and this
+            // component is not present in the playable MainMap scene.
+            if (!experimentalPlaybackEnabled) yield break;
             yield return player.FadeToBlack(fadeDuration);
-            player.MoveAndLockAt(playerAnchor, monsterAnchor);
 
             GameObject scareVisual = Instantiate(killer.VisualRoot.gameObject, monsterAnchor.position, monsterAnchor.rotation, monsterAnchor);
             scareVisual.name = $"{killer.MonsterId}_JumpscareVisual";
@@ -54,8 +57,6 @@ namespace TheBestMonkeyGame.Monsters
             yield return player.FadeToBlack(fadeDuration);
             if (centeredAudio != null) centeredAudio.Stop();
             Destroy(scareVisual);
-            player.RestoreAfterJumpscare();
-            killer.ResumeAfterJumpscare();
             yield return player.FadeFromBlack(fadeDuration);
         }
 

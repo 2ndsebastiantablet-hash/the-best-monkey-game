@@ -8,12 +8,13 @@ namespace TheBestMonkeyGame
     public sealed class PlayerRespawn : MonoBehaviour
     {
         [SerializeField] private Transform spawnPoint;
-        [SerializeField] private float fallThreshold = -6f;
+        [SerializeField] private float fallThreshold = -8f;
 
         private Rigidbody body;
         private Player locomotion;
         private Vector3 fallbackSpawn;
         private Quaternion fallbackRotation;
+        private Coroutine resetRoutine;
 
         public Transform SpawnPoint
         {
@@ -21,9 +22,15 @@ namespace TheBestMonkeyGame
             set => spawnPoint = value;
         }
 
-        public float SpawnProtectionRemaining { get; private set; }
+        public float FallThreshold
+        {
+            get => fallThreshold;
+            set => fallThreshold = value;
+        }
 
+        public float SpawnProtectionRemaining { get; private set; }
         public bool IsSpawnProtected => SpawnProtectionRemaining > 0f;
+        public bool IsResetting { get; private set; }
 
         private void Awake()
         {
@@ -35,13 +42,13 @@ namespace TheBestMonkeyGame
 
         private void Start()
         {
-            StartCoroutine(ReinitializeAfterTrackedPose());
+            BeginPoseReinitialization();
         }
 
         private void FixedUpdate()
         {
             SpawnProtectionRemaining = Mathf.Max(0f, SpawnProtectionRemaining - Time.fixedDeltaTime);
-            if (transform.position.y < fallThreshold)
+            if (!IsResetting && transform.position.y < fallThreshold)
             {
                 Respawn();
             }
@@ -51,40 +58,49 @@ namespace TheBestMonkeyGame
         {
             Vector3 position = spawnPoint != null ? spawnPoint.position : fallbackSpawn;
             Quaternion rotation = spawnPoint != null ? spawnPoint.rotation : fallbackRotation;
-            body.linearVelocity = Vector3.zero;
-            body.angularVelocity = Vector3.zero;
+            locomotion.disableMovement = true;
+            ClearBodyVelocity();
             transform.SetPositionAndRotation(position, rotation);
             SpawnProtectionRemaining = Mathf.Max(SpawnProtectionRemaining, spawnProtectionSeconds);
             Physics.SyncTransforms();
-            StopAllCoroutines();
-            StartCoroutine(ReinitializeAfterTrackedPose());
+            BeginPoseReinitialization();
         }
 
         public void StabilizeAfterCalibration()
         {
-            body.linearVelocity = Vector3.zero;
-            body.angularVelocity = Vector3.zero;
-            StopAllCoroutines();
-            StartCoroutine(ReinitializeAfterTrackedPose());
+            locomotion.disableMovement = true;
+            ClearBodyVelocity();
+            BeginPoseReinitialization();
+        }
+
+        private void BeginPoseReinitialization()
+        {
+            if (resetRoutine != null) StopCoroutine(resetRoutine);
+            resetRoutine = StartCoroutine(ReinitializeAfterTrackedPose());
         }
 
         private IEnumerator ReinitializeAfterTrackedPose()
         {
-            bool wasDisabled = locomotion.disableMovement;
+            IsResetting = true;
             locomotion.disableMovement = true;
-            body.linearVelocity = Vector3.zero;
-            body.angularVelocity = Vector3.zero;
+            ClearBodyVelocity();
 
-            // Allow OpenXR pose components to update at the new root position before
-            // GorillaLocomotion snapshots its head/hand history.
+            // Let OpenXR update the tracked camera/controllers at the new root pose.
             yield return null;
-            yield return new WaitForEndOfFrame();
+            yield return null;
 
             Physics.SyncTransforms();
+            ClearBodyVelocity();
+            locomotion.ResetLocomotionState(true);
+            locomotion.disableMovement = false;
+            IsResetting = false;
+            resetRoutine = null;
+        }
+
+        private void ClearBodyVelocity()
+        {
             body.linearVelocity = Vector3.zero;
             body.angularVelocity = Vector3.zero;
-            locomotion.InitializeValues();
-            locomotion.disableMovement = wasDisabled;
         }
     }
 
@@ -93,10 +109,7 @@ namespace TheBestMonkeyGame
         private void OnTriggerEnter(Collider other)
         {
             PlayerRespawn respawn = other.GetComponentInParent<PlayerRespawn>();
-            if (respawn != null)
-            {
-                respawn.Respawn();
-            }
+            if (respawn != null) respawn.Respawn();
         }
     }
 }

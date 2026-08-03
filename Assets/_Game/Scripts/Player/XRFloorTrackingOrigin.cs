@@ -15,6 +15,9 @@ namespace TheBestMonkeyGame
         private readonly List<XRInputSubsystem> inputSubsystems = new List<XRInputSubsystem>();
         private float nextConfigurationAttempt;
 
+        public TrackingOriginModeFlags CurrentMode { get; private set; } = TrackingOriginModeFlags.Unknown;
+        public Transform TrackingSpace => trackingSpace;
+
         public void Configure(Transform space)
         {
             trackingSpace = space;
@@ -51,6 +54,7 @@ namespace TheBestMonkeyGame
                 {
                     subsystem.TrySetTrackingOriginMode(TrackingOriginModeFlags.Floor);
                 }
+                CurrentMode = subsystem.GetTrackingOriginMode();
             }
         }
     }

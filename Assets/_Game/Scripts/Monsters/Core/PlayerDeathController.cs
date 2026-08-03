@@ -10,17 +10,11 @@ namespace TheBestMonkeyGame.Monsters
         [SerializeField] private Player locomotion;
         [SerializeField] private PlayerRespawn respawn;
         [SerializeField] private Rigidbody body;
-        [SerializeField] private Transform trackedHead;
-        [SerializeField] private XRTrackedPose[] trackedPoses;
         [SerializeField] private Renderer[] handRenderers;
         [SerializeField] private Renderer fadeOverlay;
-        [SerializeField] private JumpscareRoomController jumpscareRoom;
+        [SerializeField, Range(0f, 0.5f)] private float fadeDuration = 0.12f;
 
         private bool deathActive;
-        private bool previousKinematic;
-        private bool previousMovementDisabled;
-        private Vector3 savedHeadLocalPosition;
-        private Quaternion savedHeadLocalRotation;
         private MaterialPropertyBlock fadeProperties;
 
         public bool DeathActive => deathActive;
@@ -29,39 +23,62 @@ namespace TheBestMonkeyGame.Monsters
             Player player,
             PlayerRespawn playerRespawn,
             Rigidbody playerBody,
-            Transform head,
-            XRTrackedPose[] poses,
             Renderer[] hands,
             Renderer overlay)
         {
             locomotion = player;
             respawn = playerRespawn;
             body = playerBody;
-            trackedHead = head;
-            trackedPoses = poses;
             handRenderers = hands;
             fadeOverlay = overlay;
             fadeProperties = new MaterialPropertyBlock();
             SetFade(0f);
         }
 
-        private void Start()
+        private void OnEnable()
         {
-            if (jumpscareRoom == null) jumpscareRoom = FindFirstObjectByType<JumpscareRoomController>();
+            RestoreSafePlayerState();
         }
 
         public void BeginDeath(MonsterBrain killer)
         {
-            if (deathActive || jumpscareRoom == null || killer == null) return;
+            if (deathActive || killer == null || respawn == null || respawn.IsSpawnProtected) return;
             deathActive = true;
-            killer.SuspendForJumpscare();
-            StartCoroutine(jumpscareRoom.Run(killer, this));
+            StartCoroutine(RespawnAfterDeath(killer));
+        }
+
+        private IEnumerator RespawnAfterDeath(MonsterBrain killer)
+        {
+            locomotion.disableMovement = true;
+            body.linearVelocity = Vector3.zero;
+            body.angularVelocity = Vector3.zero;
+
+            if (fadeOverlay != null && fadeDuration > 0f)
+            {
+                yield return FadeToBlack(fadeDuration);
+            }
+
+            // PlayerSpawn is a floor point. PlayerRespawn moves only the rigidbody
+            // root, then rebuilds tracked hand/head history on the following frame.
+            respawn.Respawn(3f);
+            killer.ResetAfterPlayerDeath();
+
+            float timeout = Time.unscaledTime + 1f;
+            while (respawn.IsResetting && Time.unscaledTime < timeout) yield return null;
+
+            RestoreSafePlayerState();
+            if (fadeOverlay != null && fadeDuration > 0f)
+            {
+                yield return FadeFromBlack(fadeDuration);
+            }
+
+            deathActive = false;
         }
 
         public IEnumerator FadeToBlack(float duration)
         {
             fadeOverlay.enabled = true;
-            for (float elapsed = 0f; elapsed < duration; elapsed += Time.unscaledDeltaTime)
+            for (float elapsed = 0f; elapsed < duration; elapsed += Mathf.Max(Time.unscaledDeltaTime, 1f / 90f))
             {
                 SetFade(Mathf.Clamp01(elapsed / duration));
                 yield return null;
@@ -71,7 +88,7 @@ namespace TheBestMonkeyGame.Monsters
 
         public IEnumerator FadeFromBlack(float duration)
         {
-            for (float elapsed = 0f; elapsed < duration; elapsed += Time.unscaledDeltaTime)
+            for (float elapsed = 0f; elapsed < duration; elapsed += Mathf.Max(Time.unscaledDeltaTime, 1f / 90f))
             {
                 SetFade(1f - Mathf.Clamp01(elapsed / duration));
                 yield return null;
@@ -80,40 +97,22 @@ namespace TheBestMonkeyGame.Monsters
             fadeOverlay.enabled = false;
         }
 
-        public void MoveAndLockAt(Transform playerAnchor, Transform monsterAnchor)
+        private void RestoreSafePlayerState()
         {
-            previousMovementDisabled = locomotion.disableMovement;
-            previousKinematic = body.isKinematic;
-            locomotion.disableMovement = true;
-            body.linearVelocity = Vector3.zero;
-            body.angularVelocity = Vector3.zero;
-            body.isKinematic = true;
-
-            savedHeadLocalPosition = trackedHead.localPosition;
-            savedHeadLocalRotation = trackedHead.localRotation;
-            foreach (XRTrackedPose pose in trackedPoses) pose.enabled = false;
-
-            Vector3 desiredForward = Vector3.ProjectOnPlane(monsterAnchor.position - playerAnchor.position, Vector3.up).normalized;
-            transform.SetPositionAndRotation(playerAnchor.position, Quaternion.LookRotation(desiredForward, Vector3.up));
-            trackedHead.localRotation = Quaternion.identity;
-            foreach (Renderer hand in handRenderers) hand.enabled = false;
-            body.linearVelocity = Vector3.zero;
-            body.angularVelocity = Vector3.zero;
-            Physics.SyncTransforms();
-        }
-
-        public void RestoreAfterJumpscare()
-        {
-            trackedHead.localPosition = savedHeadLocalPosition;
-            trackedHead.localRotation = savedHeadLocalRotation;
-            foreach (XRTrackedPose pose in trackedPoses) pose.enabled = true;
-            foreach (Renderer hand in handRenderers) hand.enabled = true;
-            body.isKinematic = previousKinematic;
-            body.linearVelocity = Vector3.zero;
-            body.angularVelocity = Vector3.zero;
-            locomotion.disableMovement = previousMovementDisabled;
-            respawn.Respawn(3f);
-            deathActive = false;
+            if (body != null)
+            {
+                body.isKinematic = false;
+                body.linearVelocity = Vector3.zero;
+                body.angularVelocity = Vector3.zero;
+            }
+            if (locomotion != null) locomotion.disableMovement = false;
+            if (handRenderers != null)
+            {
+                foreach (Renderer hand in handRenderers)
+                {
+                    if (hand != null) hand.enabled = true;
+                }
+            }
         }
 
         private void SetFade(float alpha)

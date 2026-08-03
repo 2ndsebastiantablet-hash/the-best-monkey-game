@@ -4,11 +4,11 @@ namespace TheBestMonkeyGame.Monsters
 {
     public sealed class TiptoeBrain : MonsterBrain
     {
-        [SerializeField, Range(3f, 7f)] private float roamSpeed = 5f;
-        [SerializeField, Range(8f, 15f)] private float chaseSpeed = 11.5f;
-        [SerializeField, Range(0.5f, 4f)] private float lostSightGrace = 2f;
-        [SerializeField, Range(3f, 12f)] private float searchDuration = 6.5f;
-        [SerializeField, Range(10f, 30f)] private float escapeDistance = 17.5f;
+        [SerializeField, Range(3f, 9f)] private float roamSpeed = 6.5f;
+        [SerializeField, Range(8f, 18f)] private float chaseSpeed = 14.5f;
+        [SerializeField, Range(0.5f, 4f)] private float lostSightGrace = 2.25f;
+        [SerializeField, Range(3f, 14f)] private float searchDuration = 9f;
+        [SerializeField, Range(15f, 45f)] private float escapeDistance = 30f;
 
         private float lastSightTime;
         private float nextSearchMove;
@@ -18,6 +18,7 @@ namespace TheBestMonkeyGame.Monsters
         public float LostSightGrace => lostSightGrace;
         public float SearchDuration => searchDuration;
         public float EscapeDistance => escapeDistance;
+        public override float MinimumSpawnDistance => 30f;
 
         public void ConfigureTiptoe(float roam, float chase, float lostGrace, float search, float escape)
         {
@@ -70,7 +71,7 @@ namespace TheBestMonkeyGame.Monsters
                     }
                     if (Time.time >= nextSearchMove)
                     {
-                        Vector2 random = Random.insideUnitCircle * 7f;
+                        Vector2 random = Random.insideUnitCircle * 12f;
                         navigation.MoveTo(lastKnownPlayerPosition + new Vector3(random.x, 0f, random.y), true);
                         nextSearchMove = Time.time + 1.2f;
                     }
@@ -80,6 +81,13 @@ namespace TheBestMonkeyGame.Monsters
                     }
                     break;
             }
+        }
+
+        protected override void ResetBehaviorMemory()
+        {
+            lastKnownPlayerPosition = Vector3.zero;
+            lastSightTime = 0f;
+            nextSearchMove = 0f;
         }
 
         protected override void OnStateChanged(MonsterState previous, MonsterState next)

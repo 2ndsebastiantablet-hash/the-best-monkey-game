@@ -126,6 +126,16 @@ namespace TheBestMonkeyGame.Editor
             {
                 ValidateRuntimeMonsters();
             }
+            if (frames == 480)
+            {
+                PlayerDeathController death = UnityEngine.Object.FindFirstObjectByType<PlayerDeathController>();
+                TiptoeBrain tiptoe = UnityEngine.Object.FindFirstObjectByType<TiptoeBrain>();
+                death?.BeginDeath(tiptoe);
+            }
+            if (frames == 620)
+            {
+                ValidateDeathRespawnRecovery();
+            }
             if (frames >= 720)
             {
                 EditorApplication.ExitPlaymode();
@@ -136,12 +146,42 @@ namespace TheBestMonkeyGame.Editor
         {
             TiptoeBrain tiptoe = UnityEngine.Object.FindFirstObjectByType<TiptoeBrain>();
             StatueBrain statue = UnityEngine.Object.FindFirstObjectByType<StatueBrain>();
+            Player player = UnityEngine.Object.FindFirstObjectByType<Player>();
+            PlayerRespawn respawn = player != null ? player.GetComponent<PlayerRespawn>() : null;
+            PlayerDeathController death = player != null ? player.GetComponent<PlayerDeathController>() : null;
             if (tiptoe == null || statue == null || tiptoe.State == MonsterState.Dormant || statue.State == MonsterState.Dormant ||
-                !tiptoe.Navigation.Agent.isOnNavMesh || !statue.Navigation.Agent.isOnNavMesh)
+                !tiptoe.Navigation.Agent.isOnNavMesh || !statue.Navigation.Agent.isOnNavMesh || player == null || player.disableMovement)
             {
                 RecordError(
                     $"Runtime monster activation failed: Tiptoe={tiptoe?.State}, Statue={statue?.State}, " +
-                    $"TiptoeOnNavMesh={tiptoe?.Navigation?.Agent?.isOnNavMesh}, StatueOnNavMesh={statue?.Navigation?.Agent?.isOnNavMesh}.");
+                    $"TiptoeOnNavMesh={tiptoe?.Navigation?.Agent?.isOnNavMesh}, StatueOnNavMesh={statue?.Navigation?.Agent?.isOnNavMesh}, " +
+                    $"movementDisabled={player?.disableMovement}, resetting={respawn?.IsResetting}, deathActive={death?.DeathActive}, " +
+                    $"playerPosition={player?.transform.position}, velocity={player?.PlayerRigidBody?.linearVelocity}.");
+            }
+        }
+
+        private static void ValidateDeathRespawnRecovery()
+        {
+            Player player = UnityEngine.Object.FindFirstObjectByType<Player>();
+            PlayerRespawn respawn = player != null ? player.GetComponent<PlayerRespawn>() : null;
+            PlayerDeathController death = player != null ? player.GetComponent<PlayerDeathController>() : null;
+            TiptoeBrain tiptoe = UnityEngine.Object.FindFirstObjectByType<TiptoeBrain>();
+            Renderer[] handRenderers = player != null
+                ? player.transform.Find("GorillaLocomotion").GetComponentsInChildren<Renderer>(true)
+                : Array.Empty<Renderer>();
+
+            if (player == null || respawn == null || death == null || tiptoe == null || death.DeathActive ||
+                respawn.IsResetting || !respawn.IsSpawnProtected || player.disableMovement ||
+                Vector3.Distance(player.transform.position, respawn.SpawnPoint.position) > 0.05f ||
+                Vector3.Distance(tiptoe.transform.position, player.transform.position) < tiptoe.MinimumSpawnDistance ||
+                handRenderers.Length < 2 || handRenderers.Any(renderer => !renderer.enabled))
+            {
+                RecordError(
+                    $"Death/respawn recovery failed: deathActive={death?.DeathActive}, resetting={respawn?.IsResetting}, " +
+                    $"protected={respawn?.IsSpawnProtected}, movementDisabled={player?.disableMovement}, " +
+                    $"playerPosition={player?.transform.position}, spawnPosition={respawn?.SpawnPoint?.position}, " +
+                    $"tiptoeDistance={(player != null && tiptoe != null ? Vector3.Distance(tiptoe.transform.position, player.transform.position) : -1f):F2}, " +
+                    $"visibleHands={handRenderers.Count(renderer => renderer.enabled)}.");
             }
         }
 
@@ -180,8 +220,8 @@ namespace TheBestMonkeyGame.Editor
                 throw new InvalidOperationException($"Complete map root scale is {mapScale}, expected uniform {RevisionBootstrap.MapScaleMultiplier:F2}.");
             }
             Bounds bounds = CalculateRendererBounds(map);
-            if (bounds.size.x < 80f || bounds.size.x > 83f || bounds.size.z < 84f || bounds.size.z > 87f ||
-                bounds.size.y < 4f || bounds.size.y > 4.5f)
+            if (bounds.size.x < 99f || bounds.size.x > 102f || bounds.size.z < 104f || bounds.size.z > 107f ||
+                bounds.size.y < 5f || bounds.size.y > 5.4f)
             {
                 throw new InvalidOperationException($"Rescaled map bounds are unexpected: {bounds.size:F3}.");
             }
@@ -206,7 +246,8 @@ namespace TheBestMonkeyGame.Editor
             ValidateMonsterScene(player.transform);
 
             EditorBuildSettingsScene[] buildScenes = EditorBuildSettings.scenes;
-            if (buildScenes.Length < 2 || buildScenes[0].path != RevisionBootstrap.MainScenePath || !buildScenes[0].enabled)
+            if (buildScenes.Length < 2 || buildScenes[0].path != RevisionBootstrap.MainScenePath || !buildScenes[0].enabled ||
+                buildScenes.Any(item => item.path == MonsterRevisionBootstrap.ExperimentalJumpscareScenePath))
             {
                 throw new InvalidOperationException("MainMap must be the first enabled build scene.");
             }
@@ -215,7 +256,7 @@ namespace TheBestMonkeyGame.Editor
             Debug.Log(
                 $"SCALE_PLAYER_STRUCTURE_VALIDATION_SUCCESS mapScale={mapScale.x:F2} bounds={bounds.size:F2} " +
                 $"doorway={RevisionBootstrap.MeasuredDoorwayHeight:F2} colliders={mapColliders.Length} spawn={spawn.transform.position:F3} " +
-                $"floorOffset={VRFloorHeightCalibration.DefaultVerticalOffset:F2} monsters=2 spawns={MonsterRevisionBootstrap.SpawnPointCount}");
+                $"floorOffset={VRFloorHeightCalibration.DefaultPlayerFloorOffset:F2} monsters=2 spawns={MonsterRevisionBootstrap.SpawnPointCount}");
         }
 
         private static void ValidatePlayerPrefab()
@@ -227,33 +268,35 @@ namespace TheBestMonkeyGame.Editor
             }
 
             Transform tracking = prefab.transform.Find("XR Origin");
-            Transform cameraTransform = prefab.transform.Find("XR Origin/Main Camera");
-            Transform headCollider = prefab.transform.Find("XR Origin/Main Camera/Head Collider");
-            Transform leftController = prefab.transform.Find("XR Origin/Left Controller Target");
-            Transform rightController = prefab.transform.Find("XR Origin/Right Controller Target");
+            Transform poseSpace = prefab.transform.Find("XR Origin/Tracking Space Offset");
+            Transform cameraTransform = prefab.transform.Find("XR Origin/Tracking Space Offset/Main Camera");
+            Transform headCollider = prefab.transform.Find("XR Origin/Tracking Space Offset/Main Camera/Head Collider");
+            Transform leftController = prefab.transform.Find("XR Origin/Tracking Space Offset/Left Controller Target");
+            Transform rightController = prefab.transform.Find("XR Origin/Tracking Space Offset/Right Controller Target");
             Transform body = prefab.transform.Find("Body Collider");
             Transform leftHand = prefab.transform.Find("GorillaLocomotion/Left Hand Sphere");
             Transform rightHand = prefab.transform.Find("GorillaLocomotion/Right Hand Sphere");
-            if (tracking == null || cameraTransform == null || headCollider == null || leftController == null ||
+            if (tracking == null || poseSpace == null || cameraTransform == null || headCollider == null || leftController == null ||
                 rightController == null || body == null || leftHand == null || rightHand == null)
             {
                 throw new InvalidOperationException("Clean VRPlayer hierarchy is incomplete.");
             }
 
-            Transform[] unscaled = { prefab.transform, tracking, cameraTransform, leftController, rightController, body };
+            Transform[] unscaled = { prefab.transform, tracking, poseSpace, cameraTransform, leftController, rightController, body };
             if (unscaled.Any(item => !Approximately(item.localScale, Vector3.one)))
             {
                 throw new InvalidOperationException("VRPlayer, XR Origin, camera, controller targets, and collider objects must remain scale 1,1,1.");
             }
             XRFloorTrackingOrigin origin = prefab.GetComponent<XRFloorTrackingOrigin>();
             VRFloorHeightCalibration calibration = prefab.GetComponent<VRFloorHeightCalibration>();
-            if (origin == null || calibration == null || calibration.TrackingSpace != tracking ||
-                Mathf.Abs(calibration.VerticalOffset - VRFloorHeightCalibration.DefaultVerticalOffset) > 0.001f ||
-                Mathf.Abs(tracking.localPosition.y - VRFloorHeightCalibration.DefaultVerticalOffset) > 0.001f ||
-                Mathf.Abs(tracking.localPosition.x) > 0.001f || Mathf.Abs(tracking.localPosition.z) > 0.001f ||
-                cameraTransform.localPosition.y > 1f)
+            if (origin == null || origin.TrackingSpace != tracking || calibration == null || calibration.PoseSpace != poseSpace ||
+                Mathf.Abs(calibration.PlayerFloorOffset - VRFloorHeightCalibration.DefaultPlayerFloorOffset) > 0.001f ||
+                !Approximately(tracking.localPosition, Vector3.zero) ||
+                Mathf.Abs(poseSpace.localPosition.y - VRFloorHeightCalibration.DefaultPlayerFloorOffset) > 0.001f ||
+                Mathf.Abs(poseSpace.localPosition.x) > 0.001f || Mathf.Abs(poseSpace.localPosition.z) > 0.001f ||
+                !Approximately(cameraTransform.localPosition, Vector3.zero))
             {
-                throw new InvalidOperationException("Floor calibration must apply -0.75 m to XR Origin without modifying tracked camera scale/rotation.");
+                throw new InvalidOperationException("Floor calibration must leave XR Origin and Main Camera at zero and apply only playerFloorOffset to the tracking-space adjustment parent.");
             }
 
             Camera[] cameras = prefab.GetComponentsInChildren<Camera>(true);
@@ -291,7 +334,8 @@ namespace TheBestMonkeyGame.Editor
             {
                 throw new InvalidOperationException("GorillaLocomotion tracked references or normal arm reach changed.");
             }
-            if (prefab.GetComponent<PlayerDeathController>() == null || cameraTransform.Find("Development Fade Overlay") == null)
+            if (prefab.GetComponent<PlayerDeathController>() == null || prefab.GetComponent<GorillaLocomotionDiagnostics>() == null ||
+                prefab.GetComponent<PlayerFloorDebugGizmo>() == null || cameraTransform.Find("Development Fade Overlay") == null)
             {
                 throw new InvalidOperationException("VRPlayer is missing the shared death controller or VR fade overlay.");
             }
@@ -304,11 +348,15 @@ namespace TheBestMonkeyGame.Editor
             MonsterSpawnPoint[] spawns = UnityEngine.Object.FindObjectsByType<MonsterSpawnPoint>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             NavMeshSurface[] surfaces = UnityEngine.Object.FindObjectsByType<NavMeshSurface>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             JumpscareRoomController[] jumpscareRooms = UnityEngine.Object.FindObjectsByType<JumpscareRoomController>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            MonsterJumpscareController[] jumpscareControllers = UnityEngine.Object.FindObjectsByType<MonsterJumpscareController>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            MonsterSpawnCoordinator[] coordinators = UnityEngine.Object.FindObjectsByType<MonsterSpawnCoordinator>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             if (tiptoes.Length != 1 || statues.Length != 1 || spawns.Length != MonsterRevisionBootstrap.SpawnPointCount ||
-                surfaces.Length != 1 || surfaces[0].navMeshData == null || jumpscareRooms.Length != 1)
+                surfaces.Length != 1 || surfaces[0].navMeshData == null || jumpscareRooms.Length != 0 ||
+                jumpscareControllers.Length != 0 || coordinators.Length != 1)
             {
                 throw new InvalidOperationException(
-                    $"Monster scene setup invalid: Tiptoe={tiptoes.Length}, Statue={statues.Length}, spawns={spawns.Length}, surfaces={surfaces.Length}, jumpscareRooms={jumpscareRooms.Length}.");
+                    $"Monster scene setup invalid: Tiptoe={tiptoes.Length}, Statue={statues.Length}, spawns={spawns.Length}, " +
+                    $"surfaces={surfaces.Length}, jumpscareRooms={jumpscareRooms.Length}, jumpscareControllers={jumpscareControllers.Length}, coordinators={coordinators.Length}.");
             }
 
             float tiptoeHeight = CalculateRendererBounds(tiptoes[0].gameObject).size.y;
@@ -330,14 +378,35 @@ namespace TheBestMonkeyGame.Editor
             {
                 throw new InvalidOperationException("Imported monster animation controllers are missing.");
             }
-            if (Vector3.Distance(tiptoes[0].transform.position, playerRoot.position) < 12f ||
-                Vector3.Distance(statues[0].transform.position, playerRoot.position) < 12f)
+            if (Vector3.Distance(tiptoes[0].transform.position, playerRoot.position) < 30f ||
+                Vector3.Distance(statues[0].transform.position, playerRoot.position) < 35f ||
+                Mathf.Abs(tiptoes[0].StartupGracePeriod - 7f) > 0.001f ||
+                Mathf.Abs(statues[0].StartupGracePeriod - 7f) > 0.001f)
             {
-                throw new InvalidOperationException("A monster starts too close to PlayerSpawn.");
+                throw new InvalidOperationException("Monster starting distance or seven-second startup grace is invalid.");
+            }
+            Vector3 sightOrigin = playerRoot.position + Vector3.up * 1.35f;
+            if (spawns.Any(point => Vector3.Distance(point.transform.position, playerRoot.position) < 35f) ||
+                spawns.Select(point => point.Region).Distinct().Count() < 3 ||
+                spawns.Any(point => !NavMesh.SamplePosition(point.transform.position, out _, 1.5f, NavMesh.AllAreas)) ||
+                spawns.Any(point =>
+                {
+                    Vector3 delta = point.transform.position + Vector3.up - sightOrigin;
+                    return !Physics.Raycast(sightOrigin, delta.normalized, delta.magnitude, 1 << 8, QueryTriggerInteraction.Ignore);
+                }))
+            {
+                throw new InvalidOperationException("Monster spawn points are not all distant, hidden, region-distributed, and NavMesh-valid.");
             }
             if (AssetDatabase.LoadAssetAtPath<NavMeshData>(MonsterRevisionBootstrap.NavMeshDataPath) == null)
             {
                 throw new InvalidOperationException("Committed NavMeshData asset is missing.");
+            }
+            if (AssetDatabase.LoadAssetAtPath<SceneAsset>(MonsterRevisionBootstrap.ExperimentalJumpscareScenePath) == null ||
+                AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Game/Experimental/Jumpscares/Prefabs/JumpscareRoom.prefab") == null ||
+                AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Game/Experimental/Jumpscares/Prefabs/TiptoeJumpscare.prefab") == null ||
+                AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Game/Experimental/Jumpscares/Prefabs/StatueJumpscare.prefab") == null)
+            {
+                throw new InvalidOperationException("Experimental jumpscare assets were not preserved outside the playable scene.");
             }
         }
 
@@ -354,9 +423,9 @@ namespace TheBestMonkeyGame.Editor
 
         private static void ValidateArchitecturalMeasurements()
         {
-            if (RevisionBootstrap.MeasuredDoorwayHeight < 2f || RevisionBootstrap.MeasuredDoorwayHeight > 2.1f ||
-                RevisionBootstrap.MeasuredCorridorCeilingHeight < 2.4f || RevisionBootstrap.MeasuredCorridorCeilingHeight > 3f ||
-                RevisionBootstrap.MeasuredLowWallHeight < 0.9f || RevisionBootstrap.MeasuredLowWallHeight > 1.1f)
+            if (RevisionBootstrap.MeasuredDoorwayHeight < 2.2f || RevisionBootstrap.MeasuredDoorwayHeight > 2.6f ||
+                RevisionBootstrap.MeasuredCorridorCeilingHeight < 3f || RevisionBootstrap.MeasuredCorridorCeilingHeight > 4.5f ||
+                RevisionBootstrap.MeasuredLowWallHeight < 1.1f || RevisionBootstrap.MeasuredLowWallHeight > 1.5f)
             {
                 throw new InvalidOperationException(
                     $"Architectural measurements invalid: doorway={RevisionBootstrap.MeasuredDoorwayHeight:F2}, " +

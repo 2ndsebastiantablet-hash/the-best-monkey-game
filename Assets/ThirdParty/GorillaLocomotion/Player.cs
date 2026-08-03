@@ -51,6 +51,12 @@ namespace GorillaLocomotion
 
         public bool disableMovement = false;
 
+        // Read-only runtime state used by the opt-in production diagnostics component.
+        // These do not alter the original GorillaLocomotion movement calculation.
+        public Vector3 CalculatedVelocityAverage => denormalizedVelocityAverage;
+        public Vector3 CalculatedCurrentVelocity => currentVelocity;
+        public Rigidbody PlayerRigidBody => playerRigidBody;
+
         private void Awake()
         {
             if (_instance != null && _instance != this)
@@ -67,12 +73,39 @@ namespace GorillaLocomotion
         public void InitializeValues()
         {
             playerRigidBody = GetComponent<Rigidbody>();
+            velocityHistorySize = Mathf.Max(1, velocityHistorySize);
             velocityHistory = new Vector3[velocityHistorySize];
             lastLeftHandPosition = leftHandFollower.transform.position;
             lastRightHandPosition = rightHandFollower.transform.position;
             lastHeadPosition = headCollider.transform.position;
             velocityIndex = 0;
             lastPosition = transform.position;
+            currentVelocity = Vector3.zero;
+            denormalizedVelocityAverage = Vector3.zero;
+            wasLeftHandTouching = false;
+            wasRightHandTouching = false;
+        }
+
+        /// <summary>
+        /// Rebuilds the pose and velocity history after a teleport or tracking-space
+        /// calibration. This is intentionally called only during spawn/reset.
+        /// </summary>
+        public void ResetLocomotionState(bool snapFollowersToTrackedHands = true)
+        {
+            if (playerRigidBody == null)
+            {
+                playerRigidBody = GetComponent<Rigidbody>();
+            }
+
+            if (snapFollowersToTrackedHands)
+            {
+                leftHandFollower.position = CurrentLeftHandPosition();
+                rightHandFollower.position = CurrentRightHandPosition();
+            }
+
+            playerRigidBody.linearVelocity = Vector3.zero;
+            playerRigidBody.angularVelocity = Vector3.zero;
+            InitializeValues();
         }
 
         private Vector3 CurrentLeftHandPosition()

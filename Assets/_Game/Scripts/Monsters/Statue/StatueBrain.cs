@@ -5,12 +5,12 @@ namespace TheBestMonkeyGame.Monsters
 {
     public sealed class StatueBrain : MonsterBrain
     {
-        [SerializeField, Range(20f, 50f)] private float awarenessRadius = 35f;
-        [SerializeField, Range(8f, 25f)] private float directSightRange = 15f;
+        [SerializeField, Range(20f, 60f)] private float awarenessRadius = 48f;
+        [SerializeField, Range(8f, 30f)] private float directSightRange = 22f;
         [SerializeField, Range(10f, 45f)] private float directLookAngle = 25f;
         [SerializeField, Range(0.5f, 4f)] private float escapeConfirmation = 2f;
         [SerializeField] private float[] teleportIntervals = { 1.5f, 1.1f, 0.8f, 0.5f };
-        [SerializeField] private float[] teleportDistances = { 12f, 8f, 5f, 3f, 1.5f };
+        [SerializeField] private float[] teleportDistances = { 18f, 13f, 9f, 6f, 3f };
 
         private int teleportStage;
         private float unwatchedTime;
@@ -23,6 +23,7 @@ namespace TheBestMonkeyGame.Monsters
         public float DirectLookAngle => directLookAngle;
         public float[] TeleportIntervals => teleportIntervals;
         public float[] TeleportDistances => teleportDistances;
+        public override float MinimumSpawnDistance => 35f;
 
         public void ConfigureStatue(float awareness, float directSight, float lookAngle, float escapeTime)
         {
@@ -136,13 +137,21 @@ namespace TheBestMonkeyGame.Monsters
         private void RelocateAndRoam()
         {
             ChangeState(MonsterState.Resetting);
-            Transform safe = MonsterSpawnPoint.FindSafePoint(playerHead, 20f, perception.ObstructionMask);
-            if (safe != null) navigation.Warp(safe.position);
+            MonsterSpawnPoint safe = MonsterSpawnPoint.FindSafePoint(playerHead, MinimumSpawnDistance, perception.ObstructionMask);
+            if (safe != null) navigation.Warp(safe.transform.position);
+            ResetBehaviorMemory();
+            audioController.PlayRelocation();
+            ChangeState(MonsterState.Roaming);
+        }
+
+        protected override void ResetBehaviorMemory()
+        {
             teleportStage = 0;
             unwatchedTime = 0f;
             outsideAwarenessTime = 0f;
-            audioController.PlayRelocation();
-            ChangeState(MonsterState.Roaming);
+            nextAwarenessCheck = 0f;
+            watched = false;
+            lastKnownPlayerPosition = Vector3.zero;
         }
 
         protected override void OnStateChanged(MonsterState previous, MonsterState next)

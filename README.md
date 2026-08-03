@@ -1,160 +1,181 @@
-# The Best Monkey Game — Unity VR prototype
+# The Best Monkey Game - Unity VR production foundation
 
-A Unity 6/Meta Quest horror prototype built around Another Axiom's official open-source GorillaLocomotion. The current revision adds configurable Quest floor-height calibration, animated NavMesh monsters, and a shared VR-safe jumpscare/respawn sequence.
+A Unity 6 / Meta Quest horror game built around Another Axiom's official open-source GorillaLocomotion. The current playable revision focuses on floor alignment, reliable locomotion recovery, a larger chase environment, and two animated NavMesh monsters. Multiplayer is intentionally not included yet.
 
 ## Project versions and targets
 
-- Unity **6000.0.34f1 (Unity 6 LTS)**
-- glTFast `com.unity.cloud.gltfast` **6.14.0**
-- AI Navigation `com.unity.ai.navigation` **2.0.9**
-- Input System **1.11.2**
-- XR Core Utilities **2.4.0**
-- XR Interaction Toolkit **3.0.8**
-- XR Plug-in Management **4.5.0**
-- OpenXR Plugin **1.14.3**
+- Unity 6000.0.34f1
+- glTFast 6.14.0
+- AI Navigation 2.0.9
+- Input System 1.11.2
+- XR Core Utilities 2.4.0
+- XR Interaction Toolkit 3.0.8
+- XR Plug-in Management 4.5.0
+- OpenXR Plugin 1.14.3
 - Android API 29+, ARM64, IL2CPP, Vulkan with OpenGL ES 3 fallback
 - Package ID `com.secondsebastiantablet.thebestmonkeygame`
 
-Android XR Plug-in Management initializes OpenXR with Meta Quest support and Oculus Touch, Touch Pro, and Touch Plus interaction profiles.
+The Android XR configuration uses OpenXR with Meta Quest support and Oculus Touch, Touch Pro, and Touch Plus controller profiles.
 
-## Open and run
+## Main assets
 
-1. Install Unity **6000.0.34f1** through Unity Hub with Android Build Support, Android SDK & NDK Tools, and OpenJDK.
-2. Add this repository root as a Unity project and let Package Manager/importing finish.
-3. Open `Assets/_Game/Scenes/MainMap.unity`, which is also the first enabled build scene.
-4. Connect Quest Link/Air Link with Meta Quest Link selected as the active OpenXR runtime, then enter Play Mode.
-
-Important assets:
-
-- Main scene: `Assets/_Game/Scenes/MainMap.unity`
-- Retained test scene: `Assets/_Game/Scenes/LocomotionTest.unity`
-- Reusable player: `Assets/_Game/Prefabs/VRPlayer.prefab`
+- Playable scene: `Assets/_Game/Scenes/MainMap.unity`
+- Locomotion test scene: `Assets/_Game/Scenes/LocomotionTest.unity`
+- Player prefab: `Assets/_Game/Prefabs/VRPlayer.prefab`
 - Map prefab: `Assets/_Game/Prefabs/Environment/GiggleFartsMap.prefab`
-- Map source: `Assets/ThirdParty/Map/giggle_farts_map.glb`
-- Tiptoe prefab/source: `Assets/_Game/Prefabs/Monsters/Tiptoe.prefab`, `Assets/ThirdParty/Monsters/Tiptoe/tiptoe.glb`
-- Statue prefab/source: `Assets/_Game/Prefabs/Monsters/Statue.prefab`, `Assets/ThirdParty/Monsters/Statue/statue.glb`
+- Tiptoe prefab: `Assets/_Game/Prefabs/Monsters/Tiptoe.prefab`
+- Statue prefab: `Assets/_Game/Prefabs/Monsters/Statue.prefab`
 - Baked navigation: `Assets/_Game/Navigation/MainMapNavMesh.asset`
-- Archived model source and license: `Assets/ThirdParty/GorillaModel`
-- Gameplay scripts: `Assets/_Game/Scripts`
 - Official locomotion source: `Assets/ThirdParty/GorillaLocomotion`
 
-## Corrected map scale
+`MainMap.unity` is the first enabled build scene.
 
-The GLB was originally normalized to a 30 m footprint, but its vertical architecture then measured only about 0.72 m at a representative doorway. This was a map-scale mismatch: the XR player and tracked poses were already using Unity's normal one-unit-per-meter scale.
+## Map scale and collision
 
-The complete `GiggleFartsMap` root is now uniformly scaled by **2.85** on X, Y, and Z. Nothing in `VRPlayer`, the XR origin, camera, controller targets, body collider, hand followers, or physics reach is scaled. The corrected rendered bounds are approximately **81.77 × 4.21 × 85.50 m**. Representative architecture now measures:
+The complete `GiggleFartsMap` root is uniformly scaled to **3.50** on X, Y, and Z. The previous revision used 2.85. The player, XR rig, camera, tracked controllers, hand followers, and monsters remain unscaled.
 
-- Doorway: **2.05 m**
-- Low wall: **1.03 m**
-- Corridor ceiling: **2.63 m**
+Measured architecture after scaling:
 
-The same four substantial static, non-convex `MeshCollider` meshes are regenerated from the map geometry and inherit that uniform root scale. Two decorative eight-triangle card meshes intentionally remain non-collidable. Every collidable mesh is on the `Locomotion` layer, tagged `LocomotionSurface`, marked static, and has the official `Surface` component.
+- Rendered bounds: **100.42 x 5.17 x 105.00 m**
+- Representative doorway: **2.52 m**
+- Representative corridor ceiling: **3.23 m**
+- Representative low wall: **1.26 m**
+- Spawn-room horizontal clearance checked at head height: **13.10 x 8.03 m**
 
-## Floor and tracking correction
+The map rebuild regenerates four static non-convex MeshColliders from the substantial source meshes. Each uses the `Locomotion` layer, `LocomotionSurface` tag, and GorillaLocomotion `Surface` component. The NavMesh is rebuilt from these physics colliders after every scale revision. Quest shadow distance is **145.38 m**.
 
-`XRFloorTrackingOrigin` requests `TrackingOriginModeFlags.Floor` from every running XR input subsystem. `VRFloorHeightCalibration` then applies a configurable **−0.75 m** correction to the `XR Origin` tracking-space parent. Its practical Inspector range is −2.0 to +1.0 m. The tracked camera and controllers remain children of that space and continue receiving unmodified OpenXR position and rotation poses; the player, XR origin, camera, and controllers all remain at scale **(1, 1, 1)**.
+## Floor alignment and tracking
 
-For development calibration, place both tracked hands at the desired comfortable near-floor contact height and hold both controller primary buttons for two seconds. The component aligns the lowest hand sphere to 12 cm above the player-root floor, applies a four-second cooldown, clears linear/angular velocity, and reinitializes GorillaLocomotion pose history. This is a development aid, not a substitute for another physical Quest test.
+The player root and `PlayerSpawn` are placed directly on the selected map floor at approximately **(0, 0.177, 0)**. The `XR Origin` remains at local zero and requests `TrackingOriginModeFlags.Floor`. A dedicated `Tracking Space Offset` child owns the one adjustable correction:
 
-The scene's `PlayerSpawn` is exactly on a raycast-selected upward-facing map surface at approximately **(0, 0.144, 0)**. The whole `VRPlayer` root starts there at scale **(1, 1, 1)**. The editor-only camera/controller fallback poses are close to the floor so non-XR Play Mode cannot recreate the earlier doubled-height result.
+- Setting: `playerFloorOffset`
+- Default: **-1.45 m**
+- Inspector range: **-2.0 to +1.0 m**
+- Hand calibration target: **2 cm above the floor**
 
-The body capsule follows the calibrated tracked head and keeps 1.5 cm of ground clearance. Spawn, calibration, death recovery, and fall respawn clear linear/angular velocity, wait for fresh tracked poses, synchronize transforms, and reinitialize GorillaLocomotion history. Horizontal spawn placement and the normal 1.5 m arm-length limit are unchanged.
+The Main Camera has a serialized local position of zero and remains headset-driven. Controller targets remain OpenXR-driven. No rig, camera, controller, player, or arm-length scaling is used. Holding both controllers' primary buttons for two seconds recalibrates the offset from the lowest tracked hand and then rebuilds locomotion history.
 
-## Player hierarchy and hands
+`PlayerFloorDebugGizmo` displays the spawn floor point, XR Origin, calibrated pose-space origin, body-collider bottom, and maximum hand reach zone in the editor. `GorillaLocomotionDiagnostics` is disabled by default and can expose hand contacts, rigidbody velocity, calculated average velocity, movement-disable state, tracking-origin mode, and root height above the floor without generating log spam.
 
-The temporary gorilla body, extracted visual-hand meshes, `Visuals` hierarchy, and `GorillaVisualRig` component/script were removed. The supplied source ZIP/STL, attribution, reference image, and license remain archived for possible future use, but there is no player model instantiated in the prefab or scene.
+Headless/editor Play Mode uses a code-only fallback pose when no XR device exists. It is never serialized onto the camera and is bypassed whenever a real OpenXR device is available.
 
-The original left and right sphere followers are visible again and are the only hand representations. Each hand has one enabled primitive `MeshRenderer` and one trigger `SphereCollider`, has no visual child object or duplicate collider, and remains the authoritative GorillaLocomotion hand transform. Left and right retain their distinct original materials.
+## GorillaLocomotion and respawn
 
-The reusable hierarchy is intentionally compact: `VRPlayer`, `XR Origin`, `Main Camera`, `Head Collider`, two controller targets, `Body Collider`, and `GorillaLocomotion` with the two sphere hands. The prefab validation rejects duplicate cameras, missing scripts, leftover model objects, non-unit rig scale, and hand children.
+The official locomotion references and tuning match the original working setup:
 
-## Monster framework
+- Left/right controller targets and followers are correctly paired
+- Head and body colliders are assigned
+- Locomotion layer mask: `Locomotion`
+- Velocity history: 10 samples
+- Maximum arm length: 1.5 m
+- Velocity limit: 0.8 m/s
+- Maximum jump speed: 6.5 m/s
+- Jump multiplier: 1.15
+- Minimum sphere-cast distance: 0.055 m
 
-The shared finite-state framework is split across navigation, perception, animation, audio, spawning, kill-trigger, and jumpscare components under `Assets/_Game/Scripts/Monsters`. Expensive sight checks are staggered, NavMesh paths are throttled, patrol destinations are reachable and non-repeating, and stuck agents repath instead of recalculating every rendered frame.
+The reset path now snaps hand followers to fresh tracked poses, clears contact and velocity history, zeros linear/angular velocity only during reset, and explicitly restores `disableMovement = false`. It uses two normal frame yields rather than `WaitForEndOfFrame`, which could leave headless and interrupted death resets permanently locked.
 
-The current AI Navigation surface uses the four map physics meshes on the `Locomotion` layer, a 0.12 m voxel size, 128-voxel tiles, and a baked 28 KB `NavMeshData` asset. Eight named spawn points are distributed across the reachable island and are used for hidden relocation. Monster agents use a 0.24 m radius and 1.55 m height for the map's corridors.
+## Monster spawning
 
-### Tiptoe
+Eight named spawn points are distributed across North, South, East, and West map wings. Every point is:
 
-Tiptoe preserves a 44-joint skin and the supplied `GorillaTag_IK_RigV3.001Action` clip. Its uniformly normalized visual height is **1.700 m**. The single imported clip loops at 1.15× while roaming and blends toward 2.5× during chase; root motion is disabled so only the NavMeshAgent moves the gameplay root.
+- At least 35 m from PlayerSpawn
+- Outside the initial player line of sight
+- On the current baked NavMesh
+- Clear of the map collision capsule
+- At least 12 m from other selected spawn points
 
-- Roam speed: **5.0 m/s**
-- Chase speed: **11.5 m/s**
-- Sight: **30 m**, **120°**, with 0.15 s confirmation and wall obstruction
-- Lost sight: follow the last-known position for a 2 s grace period
-- Search: sample nearby reachable points for 6.5 s
-- Escape: line of sight must remain broken and the player must be at least 17.5 m away
+At startup, `MonsterSpawnCoordinator` selects different hidden regions and prevents overlap. Current deterministic starting regions are:
 
-### Statue
+- Tiptoe: **South Wing**, approximately **(19.28, 0.18, -50.50)**
+- Statue: **North Wing**, approximately **(-48.21, 0.18, 50.04)**
 
-Statue preserves a 28-joint skin and the supplied `Scene` clip. Its uniformly normalized visual height is **1.900 m**. The clip is used for roaming and is frozen at zero playback speed for the static watched pose; root motion is disabled.
+Both monsters remain dormant for **7 seconds**. A killer reset rejects the prior point, the other monster's location, visible points, and points below its minimum distance.
 
-- General awareness radius: **35 m**
-- Direct-sight aggro: **15 m**, 100° forward field, unobstructed line of sight
-- Strict player gaze: **25°** central cone to become watched and 30° to stop being watched
+## Tiptoe tuning
+
+Tiptoe retains the supplied 44-joint animated skin, loops `GorillaTag_IK_RigV3.001Action`, and has a normalized visual height of **1.700 m**. Root motion is disabled.
+
+- Roam speed: **6.5 m/s**
+- Chase speed: **14.5 m/s**
+- Sight: **42 m**, 120 degrees, 0.15 s confirmation, wall-obstructed
+- Lost-sight grace: **2.25 s**
+- Search duration: **9 s**
+- Search radius: **12 m** around the last-known position
+- Escape distance: **30 m**
+- Minimum spawn/reset distance: **30 m**
+- Navigation repath interval: **0.28 s**
+
+Death reset clears last-known position, sight time, search timing, chase state, navigation, animation state, and kill-trigger state before returning Tiptoe to Roaming.
+
+## Statue tuning
+
+Statue retains the supplied 28-joint animated skin, uses the `Scene` clip, and has a normalized visual height of **1.900 m**. Root motion is disabled and animation freezes while watched.
+
+- Awareness radius: **48 m**
+- Direct-sight range: **22 m**, 100-degree field
+- Watched cone: **25 degrees**, with 30-degree release hysteresis
 - Teleport intervals: **1.5, 1.1, 0.8, 0.5 s**
-- Teleport distances: **12, 8, 5, 3, 1.5 m**
-- Placement: sampled on the NavMesh, outside the central view, clear of walls/floor overlap, and varied around the player
-- Escape: remain outside the full awareness radius for 2 s, then relocate at least 20 m away to a hidden valid spawn
+- Teleport distances: **18, 13, 9, 6, 3 m**
+- Awareness escape confirmation: **2 s**
+- Minimum spawn/reset distance: **35 m**
 
-Both GLBs keep mipmaps, non-readable textures, anisotropic level 1, and offscreen skin updates disabled. Tiptoe textures range from 64² to 256²; Statue textures are at most 512², so no oversized Quest textures are introduced.
+Teleport targets must be on the NavMesh, outside the central view, and clear of walls and floor overlap. Reset clears watched state, aggro memory, teleport stage/timers, navigation, animation state, and kill-trigger state before returning Statue to Roaming.
 
-## Shared jumpscare room
+Monster 3D audio uses linear rolloff to **55 m**. The synthesized placeholder asset at `Assets/_Game/Audio/Monsters/placeholder_monster_noise.wav` should eventually be replaced with final monster-specific audio.
 
-`MonsterSystems/JumpscareRoom` is isolated 500 m below and 200 m outside the map. A kill fades to black, disables GorillaLocomotion and hand pushes, zeros the rigidbody, temporarily pauses tracked-pose components, aligns the full rig during black, and shows a collider-free copy of the correct killer 1.25 m ahead. The monster shakes procedurally, advances slightly, and uses a labeled synthesized-noise placeholder scream for approximately two seconds.
+## Death flow and experimental jumpscares
 
-The sequence fades out before returning the complete player root to `PlayerSpawn`, restores tracked poses and visible sphere hands, resets locomotion history, relocates the killer to a hidden spawn, and grants three seconds of spawn protection. Final monster-specific audio should replace `Assets/_Game/Audio/Monsters/placeholder_monster_noise.wav`.
+Jumpscares are **disabled in the playable game**. `MainMap.unity`, the production player prefab, and the production monster prefabs contain no jumpscare room or monster-jumpscare component.
 
-## Controls
+Preserved experimental work:
 
-- Move the real headset and controllers to move the tracked rig.
-- Press a hand against a floor or wall and push/pull to propel or climb.
-- Push sharply away from a surface to jump; launch speed remains capped by GorillaLocomotion.
-- Falling below the map returns the full rig to `PlayerSpawn`.
-- Hold both controller primary buttons for two seconds to perform development floor recalibration.
-- Thumbstick movement, teleport, and artificial turning remain disabled.
+- Scene: `Assets/_Game/Scenes/Experimental/JumpscareRoom.unity`
+- Room and monster prefabs: `Assets/_Game/Experimental/Jumpscares/Prefabs`
+- Scripts: `Assets/_Game/Experimental/Jumpscares/Scripts`
+- Black-room material: `Assets/_Game/Experimental/Jumpscares/Materials`
 
-## Validation and Android build
+The experimental scene is not in build settings and its room controller is disabled.
 
-The validation checks floor calibration placement, unit player/XR/camera scales, visible sphere hands, map measurements/colliders, the baked NavMesh, eight spawn points, both normalized animated monsters, dedicated kill triggers, the jumpscare room, build-scene order, and Android OpenXR configuration. It runs 720 Play Mode frames, forces the startup grace to complete for validation, confirms both agents activate on the NavMesh, and collects all errors:
+Current playable death flow:
 
-```powershell
-& 'C:\Program Files\Unity\Hub\Editor\6000.0.34f1\Editor\Unity.exe' `
-  -batchmode `
-  -projectPath '<repository-path>' `
-  -executeMethod TheBestMonkeyGame.Editor.ProjectVerification.Run `
-  -logFile '<repository-path>\Build\MonsterPlayMode.log'
-```
+1. The first monster contact disarms duplicate kill triggers.
+2. A short stable black fade begins without moving or rotating the tracked camera.
+3. The full player root returns to floor-level `PlayerSpawn`.
+4. Linear/angular velocity and GorillaLocomotion pose/history state are reset.
+5. Visible sphere hands and locomotion are explicitly restored.
+6. The killer moves to a hidden distant spawn and clears its AI state.
+7. The player receives three seconds of spawn protection.
+8. The fade clears.
 
-The Android smoke build command is:
+## Validation and build
 
-```powershell
-& 'C:\Program Files\Unity\Hub\Editor\6000.0.34f1\Editor\Unity.exe' `
-  -batchmode `
-  -projectPath '<repository-path>' `
-  -executeMethod TheBestMonkeyGame.Editor.RevisionBootstrap.BuildAndroidSmokeTest `
-  -logFile '<repository-path>\Build\MonsterAndroidBuild.log'
-```
+`ProjectVerification` checks the player hierarchy, floor point, unit rig scales, visible hands, GorillaLocomotion references, map measurements, colliders, NavMesh, eight hidden spawn points, separate monster regions, seven-second grace, animated monster setup, absence of playable jumpscares, experimental asset preservation, build-scene order, and Android OpenXR configuration.
 
-It produces `Build/TheBestMonkeyGame.apk`. The local `Build` directory and APK are intentionally ignored by Git.
+The 720-frame Play Mode test also activates both agents, confirms each is on the NavMesh, asserts movement is unlocked, invokes a Tiptoe kill, and verifies normal respawn, visible hands, spawn protection, distant killer reset, and locomotion recovery. Red Console errors fail the run.
 
-## Quest install
+Android smoke builds use ARM64 and IL2CPP and write `Build/TheBestMonkeyGame.apk`. `Build`, APKs, Library, Temp, Logs, obj, and UserSettings are intentionally excluded from Git.
 
-1. Enable developer mode for the headset in the Meta Horizon mobile app and restart if required.
-2. Connect an unlocked headset with a data-capable USB cable and accept **Allow USB debugging**.
-3. Confirm `adb devices` shows the headset as `device`, then run `adb install -r .\Build\TheBestMonkeyGame.apk`.
-4. Launch the app from **App Library > Unknown Sources**.
+## Next physical Quest test
 
-## Known limitations
+Physical headset validation is still required. Verify:
 
-- The **−0.75 m** floor correction is an informed starting value, not a headset-verified result. The next physical test should tune `VRFloorHeightCalibration.verticalOffset` in small increments and confirm normal standing hands need only a slight lowering to touch the floor.
-- Tiptoe chase speed, perception, search escape distance, Statue gaze cone/teleport cadence, kill-trigger reach, jumpscare comfort, and all audio volumes require physical Quest playtesting.
-- The archived gorilla mesh is intentionally not displayed. A future avatar should be a properly rigged model whose visuals follow the existing authoritative head and sphere-hand transforms without adding locomotion colliders.
-- Map collision cost, lighting, texture compression, and the central spawn should still be profiled on each supported Quest model.
-- There is no multiplayer, grabbing, haptics, menu, final audio, comfort turning, or production keystore yet.
+- Standing headset height and natural floor reach with the **-1.45 m** default
+- Both hand spheres follow the correct controller and can press floor/walls
+- No idle drift, startup launch, missing hand, or body/head misalignment
+- Floor pushing, wall pushing, climbing, and jumping
+- Both-button recalibration and the 2 cm hand target
+- Movement and visible hands after monster death and fall reset
+- No black-screen hang, camera lock, or jumpscare transition
+- Door/corridor comfort at high locomotion speed
+- Tiptoe cornering, overshoot, chase speed, and search behavior
+- Statue awareness, gaze freeze, teleport clearance, and reset distance
+- Lighting, shadows, collision cost, NavMesh behavior, and audio rolloff on the target Quest model
+
+Do not treat automated Play Mode or Android build success as physical headset validation.
 
 ## Licensing
 
-GorillaLocomotion is from Another Axiom's official repository at commit `bc42e959cf3e69178f9147d89bd3ffeab1c432c4` and is licensed under MIT; see `Assets/ThirdParty/Licenses/Another-Axiom-GorillaLocomotion-MIT.txt`. The archived model's supplied public-domain dedication and attribution text are preserved with its source files.
+GorillaLocomotion is from Another Axiom's official repository at commit `bc42e959cf3e69178f9147d89bd3ffeab1c432c4` and is licensed under MIT; see `Assets/ThirdParty/Licenses/Another-Axiom-GorillaLocomotion-MIT.txt`.
 
-The GLB's embedded metadata identifies **Giggle Fart's Map** and **Statue** by **Zman**, and **Tiptoe** by **GT/Cooldude16**, as CC BY 4.0. Sources and modification notes are recorded beside each asset under `Assets/ThirdParty`. Original project code has not yet been assigned a separate license.
+The GLB metadata identifies Giggle Fart's Map and Statue by Zman, and Tiptoe by GT/Cooldude16, as CC BY 4.0. Sources and modification notes are recorded beside each asset under `Assets/ThirdParty`.

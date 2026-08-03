@@ -7,9 +7,9 @@ namespace TheBestMonkeyGame.Monsters
     public sealed class MonsterNavigation : MonoBehaviour
     {
         [SerializeField] private NavMeshAgent agent;
-        [SerializeField, Min(1f)] private float patrolRadius = 22f;
-        [SerializeField, Range(0.1f, 2f)] private float repathInterval = 0.35f;
-        [SerializeField, Range(0.5f, 4f)] private float stuckTimeout = 1.75f;
+        [SerializeField, Min(1f)] private float patrolRadius = 35f;
+        [SerializeField, Range(0.1f, 2f)] private float repathInterval = 0.28f;
+        [SerializeField, Range(0.5f, 4f)] private float stuckTimeout = 2f;
         [SerializeField, Range(0.01f, 0.3f)] private float progressThreshold = 0.08f;
 
         private NavMeshPath validationPath;
@@ -65,7 +65,7 @@ namespace TheBestMonkeyGame.Monsters
             if (validationPath == null) validationPath = new NavMeshPath();
             if (!EnsureOnNavMesh() || (!force && Time.time < nextRepathTime)) return false;
             nextRepathTime = Time.time + repathInterval;
-            if (!NavMesh.SamplePosition(destination, out NavMeshHit hit, 2.5f, agent.areaMask)) return false;
+            if (!NavMesh.SamplePosition(destination, out NavMeshHit hit, 4.5f, agent.areaMask)) return false;
             if (!NavMesh.CalculatePath(transform.position, hit.position, agent.areaMask, validationPath) || validationPath.status != NavMeshPathStatus.PathComplete) return false;
             agent.isStopped = false;
             return agent.SetDestination(hit.position);
@@ -81,7 +81,7 @@ namespace TheBestMonkeyGame.Monsters
 
         public bool Warp(Vector3 position)
         {
-            if (!NavMesh.SamplePosition(position, out NavMeshHit hit, 4f, NavMesh.AllAreas)) return false;
+            if (!NavMesh.SamplePosition(position, out NavMeshHit hit, 8f, NavMesh.AllAreas)) return false;
             bool result = agent.Warp(hit.position);
             if (result)
             {
