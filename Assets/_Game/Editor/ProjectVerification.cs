@@ -246,10 +246,11 @@ namespace TheBestMonkeyGame.Editor
             ValidateMonsterScene(player.transform);
 
             EditorBuildSettingsScene[] buildScenes = EditorBuildSettings.scenes;
-            if (buildScenes.Length < 2 || buildScenes[0].path != RevisionBootstrap.MainScenePath || !buildScenes[0].enabled ||
+            if (buildScenes.Length < 3 || buildScenes[0].path != MultiplayerMilestoneBuilder.MainMenuPath || !buildScenes[0].enabled ||
+                buildScenes[1].path != RevisionBootstrap.MainScenePath || !buildScenes[1].enabled ||
                 buildScenes.Any(item => item.path == MonsterRevisionBootstrap.ExperimentalJumpscareScenePath))
             {
-                throw new InvalidOperationException("MainMap must be the first enabled build scene.");
+                throw new InvalidOperationException("MainMenu must be first and MainMap must remain the enabled Single Player scene.");
             }
             ValidateOpenXr();
 
