@@ -5,52 +5,32 @@ using UnityEngine.XR;
 namespace TheBestMonkeyGame
 {
     /// <summary>
-    /// Requests a floor-level OpenXR tracking origin so a real room floor maps to
-    /// the player root's Y plane. The offset is only for centimeter-scale calibration.
+    /// Requests a floor-level OpenXR tracking origin. Vertical calibration is owned
+    /// by VRFloorHeightCalibration so tracked camera poses are never overwritten here.
     /// </summary>
     [DefaultExecutionOrder(-400)]
     public sealed class XRFloorTrackingOrigin : MonoBehaviour
     {
         [SerializeField] private Transform trackingSpace;
-        [SerializeField, Range(-0.1f, 0.1f)] private float playerFloorOffset;
-
         private readonly List<XRInputSubsystem> inputSubsystems = new List<XRInputSubsystem>();
         private float nextConfigurationAttempt;
 
-        public float PlayerFloorOffset
-        {
-            get => playerFloorOffset;
-            set => playerFloorOffset = Mathf.Clamp(value, -0.1f, 0.1f);
-        }
-
-        public void Configure(Transform space, float floorOffset = 0f)
+        public void Configure(Transform space)
         {
             trackingSpace = space;
-            PlayerFloorOffset = floorOffset;
-            ApplyOffset();
         }
 
         private void OnEnable()
         {
-            ApplyOffset();
             TryConfigureFloorOrigin();
         }
 
         private void Update()
         {
-            ApplyOffset();
             if (Time.unscaledTime >= nextConfigurationAttempt)
             {
                 TryConfigureFloorOrigin();
                 nextConfigurationAttempt = Time.unscaledTime + 1f;
-            }
-        }
-
-        private void ApplyOffset()
-        {
-            if (trackingSpace != null)
-            {
-                trackingSpace.localPosition = Vector3.up * playerFloorOffset;
             }
         }
 

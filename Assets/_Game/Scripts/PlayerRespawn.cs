@@ -21,6 +21,10 @@ namespace TheBestMonkeyGame
             set => spawnPoint = value;
         }
 
+        public float SpawnProtectionRemaining { get; private set; }
+
+        public bool IsSpawnProtected => SpawnProtectionRemaining > 0f;
+
         private void Awake()
         {
             body = GetComponent<Rigidbody>();
@@ -36,20 +40,30 @@ namespace TheBestMonkeyGame
 
         private void FixedUpdate()
         {
+            SpawnProtectionRemaining = Mathf.Max(0f, SpawnProtectionRemaining - Time.fixedDeltaTime);
             if (transform.position.y < fallThreshold)
             {
                 Respawn();
             }
         }
 
-        public void Respawn()
+        public void Respawn(float spawnProtectionSeconds = 3f)
         {
             Vector3 position = spawnPoint != null ? spawnPoint.position : fallbackSpawn;
             Quaternion rotation = spawnPoint != null ? spawnPoint.rotation : fallbackRotation;
             body.linearVelocity = Vector3.zero;
             body.angularVelocity = Vector3.zero;
             transform.SetPositionAndRotation(position, rotation);
+            SpawnProtectionRemaining = Mathf.Max(SpawnProtectionRemaining, spawnProtectionSeconds);
             Physics.SyncTransforms();
+            StopAllCoroutines();
+            StartCoroutine(ReinitializeAfterTrackedPose());
+        }
+
+        public void StabilizeAfterCalibration()
+        {
+            body.linearVelocity = Vector3.zero;
+            body.angularVelocity = Vector3.zero;
             StopAllCoroutines();
             StartCoroutine(ReinitializeAfterTrackedPose());
         }

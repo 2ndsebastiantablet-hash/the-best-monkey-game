@@ -128,13 +128,15 @@ namespace TheBestMonkeyGame.Editor
                 tracking.localScale = Vector3.one;
 
                 cameraTransform.name = "Main Camera";
-                cameraTransform.localPosition = new Vector3(0f, 0.25f, 0f);
+                // Editor-only non-XR fallback. After the -0.75 m calibration this
+                // leaves the test camera 0.20 m above the floor, never at desktop height.
+                cameraTransform.localPosition = new Vector3(0f, 0.95f, 0f);
                 cameraTransform.localScale = Vector3.one;
                 leftController.name = "Left Controller Target";
-                leftController.localPosition = new Vector3(-0.22f, 0.22f, 0.18f);
+                leftController.localPosition = new Vector3(-0.22f, 0.85f, 0.18f);
                 leftController.localScale = Vector3.one;
                 rightController.name = "Right Controller Target";
-                rightController.localPosition = new Vector3(0.22f, 0.22f, 0.18f);
+                rightController.localPosition = new Vector3(0.22f, 0.85f, 0.18f);
                 rightController.localScale = Vector3.one;
 
                 XRFloorTrackingOrigin floorOrigin = root.GetComponent<XRFloorTrackingOrigin>();
@@ -142,7 +144,7 @@ namespace TheBestMonkeyGame.Editor
                 {
                     floorOrigin = root.AddComponent<XRFloorTrackingOrigin>();
                 }
-                floorOrigin.Configure(tracking, 0f);
+                floorOrigin.Configure(tracking);
 
                 bodyTransform.name = "Body Collider";
                 bodyTransform.localScale = Vector3.one;
@@ -171,8 +173,20 @@ namespace TheBestMonkeyGame.Editor
 
                 locomotionObjects.name = "GorillaLocomotion";
                 locomotionObjects.localScale = Vector3.one;
-                ConfigureVisibleHand(leftHand, "Left Hand Sphere", LeftHandMaterialPath, new Vector3(-0.22f, 0.22f, 0.18f));
-                ConfigureVisibleHand(rightHand, "Right Hand Sphere", RightHandMaterialPath, new Vector3(0.22f, 0.22f, 0.18f));
+                ConfigureVisibleHand(leftHand, "Left Hand Sphere", LeftHandMaterialPath, new Vector3(-0.22f, 0.85f, 0.18f));
+                ConfigureVisibleHand(rightHand, "Right Hand Sphere", RightHandMaterialPath, new Vector3(0.22f, 0.85f, 0.18f));
+
+                PlayerRespawn respawn = root.GetComponent<PlayerRespawn>();
+                if (respawn == null)
+                {
+                    throw new InvalidOperationException("VRPlayer is missing PlayerRespawn.");
+                }
+                VRFloorHeightCalibration calibration = root.GetComponent<VRFloorHeightCalibration>();
+                if (calibration == null)
+                {
+                    calibration = root.AddComponent<VRFloorHeightCalibration>();
+                }
+                calibration.Configure(tracking, leftHand, rightHand, respawn, VRFloorHeightCalibration.DefaultVerticalOffset);
 
                 Player player = root.GetComponent<Player>();
                 if (player == null)
