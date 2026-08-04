@@ -1,7 +1,8 @@
 {
   "PlayerTags": [
     "AutoHost",
-    "AutoClient"
+    "AutoClient",
+    "AutoMatchCycle"
   ],
   "version": "1.3.3"
 }

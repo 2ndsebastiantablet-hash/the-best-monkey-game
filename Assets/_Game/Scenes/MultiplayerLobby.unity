@@ -818,7 +818,7 @@ MonoBehaviour:
     m_PressedTrigger: Pressed
     m_SelectedTrigger: Selected
     m_DisabledTrigger: Disabled
-  m_Interactable: 0
+  m_Interactable: 1
   m_TargetGraphic: {fileID: 508666423}
   m_OnClick:
     m_PersistentCalls:
@@ -987,13 +987,11 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: 'Head and hands are synchronized.
+  m_Text: 'The host can start the shared match.
 
 
-    The host is an ordinary player.
-
-    No
-    monsters or match gameplay are active yet.'
+    Host and clients use identical
+    movement, death, and respawn rules.'
 --- !u!222 &522912114
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -1612,7 +1610,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: "START MATCH  \u2022  COMING NEXT"
+  m_Text: START MATCH
 --- !u!222 &1355545354
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -2039,15 +2037,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 0
+  GlobalObjectIdHash: 85465090
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
-  m_InScenePlaced: 0
+  m_InScenePlaced: 1
   ActiveSceneSynchronization: 0
-  SceneMigrationSynchronization: 1
+  SceneMigrationSynchronization: 0
   SpawnWithObservers: 1
   DontDestroyWithOwner: 0
   AutoObjectParentSync: 1

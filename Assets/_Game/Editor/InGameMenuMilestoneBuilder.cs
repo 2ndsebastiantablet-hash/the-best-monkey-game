@@ -142,10 +142,11 @@ namespace TheBestMonkeyGame.Editor
             GameObject home = CreatePanel(canvasObject.transform, "HomePanel");
             CreateText(home.transform, "ROOM MENU", new Vector2(0f, 275f), new Vector2(680f, 75f), 43, TextAnchor.MiddleCenter, Ink, FontStyle.Bold);
             CreateText(home.transform, "LOCAL PLAYER CONTROLS", new Vector2(0f, 225f), new Vector2(680f, 38f), 17, TextAnchor.MiddleCenter, Accent, FontStyle.Bold);
-            Button resume = CreateButton(home.transform, "RESUME", new Vector2(0f, 105f), new Vector2(410f, 68f));
-            Button settings = CreateButton(home.transform, "SETTINGS", new Vector2(0f, 15f), new Vector2(410f, 68f));
-            Button leave = CreateButton(home.transform, "LEAVE GAME", new Vector2(0f, -75f), new Vector2(410f, 68f));
-            Text status = CreateText(home.transform, string.Empty, new Vector2(0f, -170f), new Vector2(650f, 60f), 19, TextAnchor.MiddleCenter, Accent, FontStyle.Bold);
+            Button resume = CreateButton(home.transform, "RESUME", new Vector2(0f, 125f), new Vector2(410f, 62f));
+            Button settings = CreateButton(home.transform, "SETTINGS", new Vector2(0f, 48f), new Vector2(410f, 62f));
+            Button endMatch = CreateButton(home.transform, "END MATCH", new Vector2(0f, -29f), new Vector2(410f, 62f));
+            Button leave = CreateButton(home.transform, "LEAVE GAME", new Vector2(0f, -106f), new Vector2(410f, 62f));
+            Text status = CreateText(home.transform, string.Empty, new Vector2(0f, -185f), new Vector2(650f, 52f), 19, TextAnchor.MiddleCenter, Accent, FontStyle.Bold);
             CreateText(home.transform, "Head and controller tracking stay active while movement is suspended.", new Vector2(0f, -255f), new Vector2(650f, 70f), 16, TextAnchor.MiddleCenter, new Color(0.64f, 0.78f, 0.84f));
 
             GameObject settingsPanel = CreatePanel(canvasObject.transform, "SettingsPanel");
@@ -168,8 +169,9 @@ namespace TheBestMonkeyGame.Editor
             settingsController.Configure(nameInput, modeData, snap, smooth, master, effects, snapValue, smoothValue, masterValue, effectsValue, palette, preview, back, snapMode, smoothMode);
 
             settingsPanel.SetActive(false);
+            endMatch.gameObject.SetActive(false);
             canvasObject.SetActive(false);
-            controller.Configure(menuAction, canvasObject, home, settingsPanel, resume, settings, leave, status, settingsController, rayMaterial);
+            controller.Configure(menuAction, canvasObject, home, settingsPanel, resume, settings, leave, endMatch, status, settingsController, rayMaterial);
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, MenuPrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
             return saved;

@@ -21,6 +21,7 @@ GameObject:
   - component: {fileID: 5594850183185937178}
   - component: {fileID: 279756963944330794}
   - component: {fileID: 256019440500501801}
+  - component: {fileID: 5490610139849159736}
   m_Layer: 0
   m_Name: GameBootstrap
   m_TagString: Untagged
@@ -255,3 +256,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 839bf16458b680a46b04b2589486a128, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!114 &5490610139849159736
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 128488029246215938}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4da1a07324220ec448699dfcdaa42f3c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  connection: {fileID: 811222995021480605}
+  matchManagerPrefab: {fileID: 2004116346679199697, guid: fd079e301dbe86a44acc74cf2eb5df12, type: 3}
+  networkTiptoePrefab: {fileID: 8573536312827383804, guid: b903f04c238f79f4f9a9cc3595539598, type: 3}
+  networkStatuePrefab: {fileID: 3814279957115332363, guid: d8e0f86d83f41a543b8141843989ba8f, type: 3}

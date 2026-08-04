@@ -111,7 +111,7 @@ namespace TheBestMonkeyGame.Editor
                     locationPathName = "Build/TheBestMonkeyGame-Multiplayer.apk",
                     target = BuildTarget.Android,
                     targetGroup = BuildTargetGroup.Android,
-                    options = BuildOptions.Development
+                    options = BuildOptions.None
                 };
                 BuildReport report = BuildPipeline.BuildPlayer(options);
                 if (report.summary.result != BuildResult.Succeeded) throw new BuildFailedException($"Android build failed with {report.summary.totalErrors} errors.");

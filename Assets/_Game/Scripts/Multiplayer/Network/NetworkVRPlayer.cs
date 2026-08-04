@@ -16,6 +16,7 @@ namespace TheBestMonkeyGame.Multiplayer
         [SerializeField] private Transform remoteRightHand;
         [SerializeField] private Renderer[] remoteRenderers;
         [SerializeField] private NetworkPlayerIdentity identity;
+        [SerializeField] private TextMesh remoteNameLabel;
         [SerializeField, Range(5f, 30f)] private float interpolationSpeed = 18f;
 
         private readonly NetworkVariable<VRPoseState> pose = new(
@@ -39,6 +40,8 @@ namespace TheBestMonkeyGame.Multiplayer
             remoteRenderers = colorRenderers;
             identity = playerIdentity;
         }
+
+        public void ConfigureMatch(TextMesh nameLabel) => remoteNameLabel = nameLabel;
 
         public override void OnNetworkSpawn()
         {
@@ -75,6 +78,23 @@ namespace TheBestMonkeyGame.Multiplayer
             propertyBlock.SetColor("_Color", color);
             propertyBlock.SetColor("_BaseColor", color);
             foreach (Renderer target in remoteRenderers) if (target != null) target.SetPropertyBlock(propertyBlock);
+            if (remoteNameLabel != null)
+            {
+                remoteNameLabel.text = identity.DisplayName;
+                remoteNameLabel.color = color;
+            }
+        }
+
+        public bool TryGetAuthoritativeHeadPose(out Vector3 position, out Vector3 forward)
+        {
+            position = default;
+            forward = Vector3.forward;
+            if (!IsSpawned) return false;
+            VRPoseState state = pose.Value;
+            Quaternion rootRotation = Quaternion.Euler(0f, state.RootYaw, 0f);
+            position = state.RootPosition + rootRotation * state.HeadPosition;
+            forward = rootRotation * state.HeadRotation * Vector3.forward;
+            return true;
         }
 
         private VRPoseState CapturePose()

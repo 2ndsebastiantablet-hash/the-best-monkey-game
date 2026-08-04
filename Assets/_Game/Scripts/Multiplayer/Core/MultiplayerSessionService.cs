@@ -68,7 +68,8 @@ namespace TheBestMonkeyGame.Multiplayer
                     SessionProperties = new Dictionary<string, SessionProperty>
                     {
                         [MultiplayerConstants.NetworkVersionProperty] = new SessionProperty(MultiplayerConstants.NetworkVersion, VisibilityPropertyOptions.Member),
-                        [MultiplayerConstants.CustomRoomCodeProperty] = new SessionProperty(code, VisibilityPropertyOptions.Member)
+                        [MultiplayerConstants.CustomRoomCodeProperty] = new SessionProperty(code, VisibilityPropertyOptions.Member),
+                        [MultiplayerConstants.MatchStateProperty] = new SessionProperty(MultiplayerMatchState.Waiting.ToString(), VisibilityPropertyOptions.Member)
                     }
                 }.WithRelayNetwork();
 
@@ -78,6 +79,13 @@ namespace TheBestMonkeyGame.Multiplayer
                 {
                     await session.LeaveAsync();
                     throw new InvalidOperationException("This room was created by an incompatible game version.");
+                }
+
+                if (!session.IsHost && TryReadProperty(session, MultiplayerConstants.MatchStateProperty, out string publishedState) &&
+                    !string.Equals(publishedState, MultiplayerMatchState.Waiting.ToString(), StringComparison.Ordinal))
+                {
+                    await session.LeaveAsync();
+                    throw new InvalidOperationException("That room is already in a match. Join again after it returns to the waiting room.");
                 }
 
                 ActiveSession = session;
@@ -166,6 +174,23 @@ namespace TheBestMonkeyGame.Multiplayer
 #else
             await Task.CompletedTask;
 #endif
+        }
+
+        public async Task PublishMatchStateAsync(MultiplayerMatchState matchState)
+        {
+            ISession session = ActiveSession;
+            if (session == null || !session.IsHost) return;
+            try
+            {
+                IHostSession host = session.AsHost();
+                host.SetProperty(MultiplayerConstants.MatchStateProperty,
+                    new SessionProperty(matchState.ToString(), VisibilityPropertyOptions.Member));
+                await host.SavePropertiesAsync();
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"MATCH_STATE_PUBLISH_WARNING state={matchState} message={exception.Message}");
+            }
         }
 
         public static string NormalizeRoomCode(string value)

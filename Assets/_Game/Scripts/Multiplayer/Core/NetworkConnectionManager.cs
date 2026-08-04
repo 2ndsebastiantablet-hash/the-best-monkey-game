@@ -106,10 +106,14 @@ namespace TheBestMonkeyGame.Multiplayer
         {
             string payload = request.Payload == null ? string.Empty : Encoding.UTF8.GetString(request.Payload);
             bool compatible = payload.StartsWith(MultiplayerConstants.NetworkVersion + "|", StringComparison.Ordinal);
-            response.Approved = compatible;
+            bool waiting = MultiplayerMatchManager.Instance == null || MultiplayerMatchManager.Instance.AllowsNewConnections;
+            bool capacity = NetworkManager.Singleton == null || NetworkManager.Singleton.ConnectedClientsIds.Count < MultiplayerConstants.MaxPlayers;
+            response.Approved = compatible && waiting && capacity;
             response.CreatePlayerObject = false;
             response.Pending = false;
-            response.Reason = compatible ? string.Empty : "Incompatible network version.";
+            response.Reason = !compatible ? "Incompatible network version." :
+                !waiting ? "A match is already in progress. Join after the room returns to the waiting room." :
+                !capacity ? "This four-player room is full." : string.Empty;
         }
 
         private async Task WaitForConnectionAsync()

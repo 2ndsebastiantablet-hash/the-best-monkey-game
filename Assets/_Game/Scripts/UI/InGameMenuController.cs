@@ -27,6 +27,7 @@ namespace TheBestMonkeyGame.UI
         [SerializeField] private Button resumeButton;
         [SerializeField] private Button settingsButton;
         [SerializeField] private Button leaveButton;
+        [SerializeField] private Button endMatchButton;
         [SerializeField] private Text statusText;
         [SerializeField] private SettingsPanelController settingsController;
         [SerializeField] private Material controllerRayMaterial;
@@ -52,6 +53,7 @@ namespace TheBestMonkeyGame.UI
         private bool[] previousTurningStates = Array.Empty<bool>();
         private float nextToggleTime;
         private Task leaveTask;
+        private bool endMatchRequested;
 
         public bool IsOpen => isOpen;
         public bool IsTransitioning => transitionStarted;
@@ -68,6 +70,7 @@ namespace TheBestMonkeyGame.UI
             Button resume,
             Button openSettings,
             Button leave,
+            Button endMatch,
             Text status,
             SettingsPanelController reusableSettings,
             Material rayMaterial)
@@ -79,6 +82,7 @@ namespace TheBestMonkeyGame.UI
             resumeButton = resume;
             settingsButton = openSettings;
             leaveButton = leave;
+            endMatchButton = endMatch;
             statusText = status;
             settingsController = reusableSettings;
             controllerRayMaterial = rayMaterial;
@@ -121,6 +125,15 @@ namespace TheBestMonkeyGame.UI
         private void Update()
         {
             if (transitionStarted) return;
+            if (endMatchRequested && MultiplayerMatchManager.Instance != null &&
+                MultiplayerMatchManager.Instance.State == MultiplayerMatchState.Waiting &&
+                SceneManager.GetActiveScene().name == MultiplayerConstants.LobbyScene)
+            {
+                endMatchRequested = false;
+                SetButtonsInteractable(true);
+                CloseMenu();
+                return;
+            }
             if (menuAction?.action != null && menuAction.action.WasPressedThisFrame() && Time.unscaledTime >= nextToggleTime)
             {
                 nextToggleTime = Time.unscaledTime + toggleDebounceSeconds;
@@ -157,6 +170,7 @@ namespace TheBestMonkeyGame.UI
             homePanel.SetActive(true);
             settingsPanel.SetActive(false);
             statusText.text = string.Empty;
+            RefreshEndMatchVisibility();
             menuRoot.SetActive(true);
             SetControllerRaysEnabled(true);
             isOpen = true;
@@ -201,6 +215,7 @@ namespace TheBestMonkeyGame.UI
             resumeButton.interactable = false;
             settingsButton.interactable = false;
             leaveButton.interactable = false;
+            if (endMatchButton != null) endMatchButton.interactable = false;
 
             GameBootstrap bootstrap = GameBootstrap.Instance;
             bool multiplayer = bootstrap != null &&
@@ -371,6 +386,7 @@ namespace TheBestMonkeyGame.UI
             Change(resumeButton, CloseMenu, add);
             Change(settingsButton, OpenSettings, add);
             Change(leaveButton, BeginLeave, add);
+            Change(endMatchButton, EndMatch, add);
         }
 
         private static void Change(Button button, UnityEngine.Events.UnityAction action, bool add)
@@ -380,6 +396,33 @@ namespace TheBestMonkeyGame.UI
         }
 
         private void BeginLeave() => _ = LeaveGameAsync();
+
+        private void EndMatch()
+        {
+            MultiplayerMatchManager match = MultiplayerMatchManager.Instance;
+            if (endMatchRequested || match == null || !match.IsHostLocal || match.State != MultiplayerMatchState.Playing) return;
+            endMatchRequested = true;
+            SetButtonsInteractable(false);
+            statusText.text = "Ending match...";
+            match.RequestEndMatch();
+        }
+
+        private void RefreshEndMatchVisibility()
+        {
+            if (endMatchButton == null) return;
+            MultiplayerMatchManager match = MultiplayerMatchManager.Instance;
+            bool visible = match != null && match.IsHostLocal && match.State == MultiplayerMatchState.Playing;
+            endMatchButton.gameObject.SetActive(visible);
+            endMatchButton.interactable = visible && !endMatchRequested;
+        }
+
+        private void SetButtonsInteractable(bool value)
+        {
+            if (resumeButton != null) resumeButton.interactable = value;
+            if (settingsButton != null) settingsButton.interactable = value;
+            if (leaveButton != null) leaveButton.interactable = value;
+            if (endMatchButton != null) endMatchButton.interactable = value;
+        }
 
         private void ClearBodyVelocity()
         {

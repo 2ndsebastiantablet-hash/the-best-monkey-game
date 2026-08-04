@@ -23,6 +23,7 @@ namespace TheBestMonkeyGame.Multiplayer
         private void Start()
         {
             leaveButton.onClick.AddListener(Leave);
+            startButton.onClick.AddListener(StartMatch);
             startButton.interactable = false;
             if (GameBootstrap.Instance != null)
             {
@@ -38,6 +39,7 @@ namespace TheBestMonkeyGame.Multiplayer
         private void OnDestroy()
         {
             leaveButton?.onClick.RemoveListener(Leave);
+            startButton?.onClick.RemoveListener(StartMatch);
             if (GameBootstrap.Instance != null)
             {
                 GameBootstrap.Instance.Presenter.StatusChanged -= OnStatus;
@@ -61,6 +63,24 @@ namespace TheBestMonkeyGame.Multiplayer
                 return item.IsRoomHost ? $"★ {name}  (HOST)" : $"• {name}";
             });
             playerList.text = players.Length == 0 ? "Connecting player..." : string.Join("\n", lines);
+            MultiplayerMatchManager match = MultiplayerMatchManager.Instance;
+            bool host = GameBootstrap.Instance != null && GameBootstrap.Instance.Sessions.IsHost;
+            if (startButton != null)
+            {
+                startButton.gameObject.SetActive(host);
+                startButton.interactable = host && match != null && match.State == MultiplayerMatchState.Waiting && players.Any(item => item.IsSpawned);
+            }
+            if (match != null && status != null && match.State != MultiplayerMatchState.Waiting)
+                status.text = match.State == MultiplayerMatchState.Starting ? "Starting match..." : $"Match state: {match.State}";
+        }
+
+        private void StartMatch()
+        {
+            MultiplayerMatchManager match = MultiplayerMatchManager.Instance;
+            if (match == null || !match.IsHostLocal) return;
+            startButton.interactable = false;
+            if (status != null) status.text = "Starting match...";
+            match.RequestStartMatch();
         }
 
         private async void Leave()
